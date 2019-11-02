@@ -103,28 +103,4 @@ void loop()
           lcd.print(stringSerialNumber);
         }
     }
-  /*
-  // when characters arrive over the serial port...
-  if (Serial.available()) {
-    // wait a bit for the entire message to arrive
-    delay(100);
-    // clear the screen
-    lcd.clear();
-    // read all the available characters
-    while (Serial.available() > 0) {
-      // display each character to the LCD
-      if (Serial.read() == 'o') {
-          lcd.print("LED is ON");
-          digitalWrite(13, HIGH);
-        }
-
-      else if (Serial.read() == 'x') {
-          lcd.print("LED is OFF");
-          digitalWrite(13, LOW);
-        }
-    }
-  }
-  */
-
-  
 }

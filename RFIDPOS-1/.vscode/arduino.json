@@ -1,0 +1,5 @@
+{
+    "board": "arduino:avr:uno",
+    "port": "COM10",
+    "sketch": "RFIDPOS-1.ino"
+}

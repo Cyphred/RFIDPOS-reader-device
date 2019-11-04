@@ -94,6 +94,16 @@ void loop()
 {
     if (menuState == 1)
     {
+        scan();
+    }
+}
+
+void scan()
+{
+    String stringSerialNumber = "";
+    // repeat until the retrieved serial number is 8 characters long
+    while (stringSerialNumber.length() != 8)
+    {
         // Check if a tag was detected
         // If yes, then variable FoundTag will contain "MI_OK"
         FoundTag = nfc.requestTag(MF1_REQIDL, TagData);
@@ -101,34 +111,18 @@ void loop()
         if (FoundTag == MI_OK)
         {
             delay(200);
-
-            // Get anti-collision value to properly read information from the tag
-            ReadTag = nfc.antiCollision(TagData);
+            ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
             memcpy(TagSerialNumber, TagData, 4); // Writes the tag info in TagSerialNumber
-
-            String stringSerialNumber = "";
+            // Loop to print serial number to serial monitor
             for (int i = 0; i < 4; i++)
-            { // Loop to print serial number to serial monitor
+            {
                 stringSerialNumber += String(TagSerialNumber[i], HEX);
             }
-
-            for (byte b: TagSerialNumber) {
-                Serial.print(stringSerialNumber);
-            }
-            Serial.println();
-            lcd.setCursor(0, 0);
-            lcd.print("SN:");
-            lcd.print(stringSerialNumber);
-
-            // play tone in buzzer
-            tone(buzzer, 2000);
-            delay(500);
-            noTone(buzzer);
-
         }
     }
-}
-
-void serialInputHandler() {
-    
+    Serial.println(stringSerialNumber);
+    // play tone in buzzer
+    tone(buzzer, 2000);
+    delay(500);
+    noTone(buzzer);
 }

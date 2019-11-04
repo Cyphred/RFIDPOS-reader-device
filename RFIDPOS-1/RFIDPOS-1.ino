@@ -2,7 +2,7 @@
 [PINOUTS]
   RC522 - https://www.brainy-bits.com/card-reader-with-an-arduino-rfid-using-the-rc522-module/
     - 3.3V -> 3.3V
-    - RST -> 8
+    - RST -> 6
     - GND -> GND
     - IRQ -> Nothing
     - SDA -> 10
@@ -23,7 +23,7 @@
 #include <SPI.h>               // Used for communication via SPI with the RFID Module
 
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
-#define RESETPIN 8 // RFID Module RESET Pin connected to digital pin
+#define RESETPIN 6 // RFID Module RESET Pin connected to digital pin
 
 byte FoundTag;                                          // value to tell if a tag is found
 byte ReadTag;                                           // Anti-collision value to read tag information
@@ -94,7 +94,7 @@ void loop()
 {
     if (menuState == 1)
     {
-        scan();
+        secureScan();
     }
 }
 
@@ -112,7 +112,7 @@ void scan()
         {
             delay(200);
             ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
-            memcpy(TagSerialNumber, TagData, 4); // Writes the tag info in TagSerialNumber
+            memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
             // Loop to print serial number to serial monitor
             for (int i = 0; i < 4; i++)
             {
@@ -125,4 +125,39 @@ void scan()
     tone(buzzer, 2000);
     delay(500);
     noTone(buzzer);
+}
+
+void secureScan()
+{
+    scan();
+    String input = "";
+    char pin[6];
+    boolean validPIN;
+
+    do
+    {
+        validPIN = true;
+        while (input.length() != 6)
+        {
+            input = Serial.readStringUntil('\n');
+        }
+        Serial.println("received");
+        input.toCharArray(pin, 6);
+        for (char c : pin)
+        {
+            if (!isDigit(c))
+            {
+                validPIN = false;
+            }
+        }
+
+        if (!validPIN)
+        {
+            validPIN = false;
+            Serial.println("PIN Invalid:" + input);
+            input = "";
+        }
+    } while (!validPIN);
+
+    Serial.println("PIN Received");
 }

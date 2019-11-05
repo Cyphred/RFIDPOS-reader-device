@@ -23,7 +23,7 @@
 #include <SPI.h>               // Used for communication via SPI with the RFID Module
 
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
-#define RESETPIN 6 // RFID Module RESET Pin connected to digital pin
+#define RESETPIN 9 // RFID Module RESET Pin connected to digital pin
 
 byte FoundTag;                                          // value to tell if a tag is found
 byte ReadTag;                                           // Anti-collision value to read tag information
@@ -36,7 +36,7 @@ LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LC
 MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RFID Reader with declared pinouts for SDA and RESET
 
 int menuState = 1;
-const int buzzer = 9;
+const int buzzer = A3;
 
 void setup()
 {

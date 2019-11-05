@@ -2,7 +2,7 @@
 [PINOUTS]
   RC522 - https://www.brainy-bits.com/card-reader-with-an-arduino-rfid-using-the-rc522-module/
     - 3.3V -> 3.3V
-    - RST -> 6
+    - RST -> 9
     - GND -> GND
     - IRQ -> Nothing
     - SDA -> 10
@@ -92,6 +92,7 @@ void setup()
 
 void loop()
 {
+    lcd.clear();
     if (menuState == 1)
     {
         secureScan();
@@ -134,55 +135,70 @@ void secureScan()
     String passcode = "";
 
     // Wait for 6-digit PIN to arrive. Make sure that on the Java program will only send a 6-character long string of purely numbers
+    lcd.clear();
+    lcd.setCursor(2,0);
+    lcd.print("Verifying...");
     while (passcode.length() != 6) {
         passcode = Serial.readStringUntil('\n');
     }
 
-    String input = "";
-    boolean passcodeMatch = false;
-    
-    for (int x = 3; x > 0; x--) {
+    // Java program will send "xxxxxx" if the scanned RFID tag does not exist in the database
+    // othewise, proceed with the verification process
+    if (passcode.equals("xxxxxx")) {
         lcd.clear();
         lcd.setCursor(2,0);
-        lcd.print("PIN :");
-        lcd.setCursor(8,0);
-
-        while (input.length() != 6) {
-            input += keypad();
-            lcd.print("*");
-        }
-
-        if (passcode.equals(input)) {
-            passcodeMatch = true;
-            lcd.clear();
-            lcd.setCursor(2,0);
-            lcd.print("Verification");
-            lcd.setCursor(3,1);
-            lcd.print("Successful");
-            delay(2000);
-            break;
-        }
-        else {
-            lcd.clear();
-            lcd.setCursor(1,0);
-            lcd.print("Incorrect PIN.");
-            lcd.setCursor(1,1);
-            lcd.print(x - 1);
-            lcd.setCursor(3,1);
-            lcd.print("retries left");
-            delay(2000);
-            input = "";
-        }
-    }
-    
-    // if passcode matches, prints 1
-    // else, prints 2
-    // the java program should be listening for these values after sending the correct passcode
-    if (passcodeMatch) {
-        Serial.println(1);
+        lcd.print("Card Invalid");
+        buzzerError();
+        delay(1250);
     }
     else {
-        Serial.println(2);
+        String input = "";
+        boolean passcodeMatch = false;
+        
+        for (int x = 3; x > 0; x--) {
+            lcd.clear();
+            lcd.setCursor(2,0);
+            lcd.print("PIN :");
+            lcd.setCursor(8,0);
+
+            while (input.length() != 6) {
+                input += keypad();
+                lcd.print("*");
+            }
+
+            if (passcode.equals(input)) {
+                passcodeMatch = true;
+                lcd.clear();
+                lcd.setCursor(2,0);
+                lcd.print("Verification");
+                lcd.setCursor(3,1);
+                lcd.print("Successful");
+                delay(2000);
+                break;
+            }
+            else {
+                lcd.clear();
+                lcd.setCursor(1,0);
+                lcd.print("Incorrect PIN.");
+                lcd.setCursor(1,1);
+                lcd.print(x - 1);
+                lcd.setCursor(3,1);
+                lcd.print("retries left");
+                buzzerError();
+                delay(1250);
+                input = "";
+            }
+        }
+
+        // if passcode matches, prints 1
+        // else, prints 2
+        // the java program should be listening for these values after sending the correct passcode
+        if (passcodeMatch) {
+            Serial.println(1);
+        }
+        else {
+            Serial.println(2);
+        }
     }
 }
 
@@ -192,4 +208,14 @@ int keypad() {
         input = Serial.readStringUntil('\n');
     }
     return input.toInt();
+}
+
+void buzzerError() {
+    tone(buzzer, 500);
+    delay(250);
+    noTone(buzzer);
+    delay(250);
+    tone(buzzer, 500);
+    delay(250);
+    noTone(buzzer);
 }

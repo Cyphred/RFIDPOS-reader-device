@@ -50,42 +50,8 @@ void setup()
     lcd.noCursor();
 
     // Start to find an RFID Module
-    lcd.setCursor(0, 0);
-    lcd.print("Looking for RFID");
-    lcd.setCursor(0, 1);
-    lcd.print("Reader");
     nfc.begin();
     version = nfc.getFirmwareVersion();
-
-    // If can't find an RFID Module
-    if (!version)
-    {
-        lcd.setCursor(0, 0);
-        lcd.print("RFID Reader not");
-        lcd.setCursor(0, 1);
-        lcd.print("found");
-        while (1)
-            ; // Wait until a RFID Module is found
-    }
-    else
-    {
-        // If found, print the information about the RFID Module
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("RC522 found!");
-        lcd.setCursor(0, 1);
-        lcd.print("0x");
-        lcd.setCursor(2, 1);
-        lcd.print(version, HEX);
-    }
-    tone(buzzer, 2000);
-    delay(250);
-    noTone(buzzer);
-    delay(250);
-    tone(buzzer, 2000);
-    delay(1000);
-    noTone(buzzer);
-    lcd.clear();
 
     Serial.println('g');
 }

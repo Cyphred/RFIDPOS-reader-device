@@ -12,15 +12,15 @@ Parts List:
 
 Functions:
 [RFID]
-• Test for RFID Scanner Status
-• Read RFID Cards and send the unique identifier over Serial - OK
-• Read RFID Cards and wait for a 6-digit PIN for verification - OK
+1. Test for RFID Scanner Status
+2. Read RFID Cards and send the unique identifier over Serial - OK
+3. Read RFID Cards and wait for a 6-digit PIN for verification - OK
 
 [GSM]
-• Test for GSM Module Status
-• Ask for GSM Signal Strength
-• Send SMS
+1. Test for GSM Module Status
+2. Ask for GSM Signal Strength
+3. Send SMS
 
 [Keypad]
-• Input functionality
+1. Input functionality
 

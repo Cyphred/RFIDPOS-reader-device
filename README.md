@@ -14,7 +14,8 @@ Functions:
 [RFID]
 1. Test for RFID Scanner Status - OK
 2. Read RFID Cards and send the unique identifier over Serial - OK
-3. Read RFID Cards and wait for a 6-digit PIN for verification - OK
+3. Read RFID Cards and wait for a 6-digit PIN for verification - [Updated, see #4]
+4. Challenge user for correct PIN/Paasscode - OK
 
 [GSM]
 1. Test for GSM Module Status

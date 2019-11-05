@@ -44,12 +44,12 @@ void setup()
     Serial.begin(115200);
     pinMode(buzzer, OUTPUT);
 
-    // Initiate the LCD:
+    // Initialize LCD
     lcd.init();
     lcd.backlight();
     lcd.noCursor();
 
-    // Start to find an RFID Module
+    // Initialize RFID Module
     nfc.begin();
     version = nfc.getFirmwareVersion();
 
@@ -58,30 +58,127 @@ void setup()
 
 void loop()
 {
-    lcd.clear();
-    if (menuState == 1)
-    {
-        secureScan();
+    splash();
+    String command = waitForSerialInput(); // Listening for commands sent over Serial monitor
+    // valid commands will result in a '1' being sent to Serial
+    // otherwise, a '2' is sent
+
+    // check commands for testing specific components and connectivity for easier troubleshooting
+    if (command.equals("check")) {
+        Serial.println(1);
+        command = waitForSerialInput();
+
+        // testing RFID Module
+        // returns '1' if OK
+        // returns '2' if not
+        if (command.equals("nfc")) {
+            if (checkNFC()) {
+                Serial.println(1);
+            }
+            else {
+                Serial.println(2);
+            }
+        }
+        // testing GSM Module
+        else if (command.equals("gsm")) {
+            Serial.println(1);
+            command = waitForSerialInput();
+
+            // testing GSM Module
+            // returns '1' if OK
+            // returns '2' if not
+            if (command.equals("status")) {
+                if (checkGSM()) {
+                    Serial.println(1);
+                }
+                else {
+                    Serial.println(2);
+                }
+            }
+
+            // testing GSM Module signal
+            // prints integer value to Serial
+            else if (command.equals("signal")) {
+                Serial.println(getGSMSignal());
+            }
+        }
     }
+
+    // Scan commands for RFID Card scanning operations
+    else if (command.equals("scan")) {
+        Serial.println(1);
+        command = waitForSerialInput();
+        if (command.equals("0")) {
+            Serial.println(scan());
+        }
+        else if (command.equals("1")) {
+            secureScan();
+        }
+    }
+    else {
+        Serial.println(2);
+    }
+
+    // GSM commands for sending SMS
+    else if (command.equals("gsm")) {
+        sendSMS();
+    }
+    
+}
+
+// Waits for any input to arrive via serial
+String waitForSerialInput() {
+    String input = "";
+    while (input.length() == 0) {
+        input = Serial.readStringUntil('\n');
+    }
+    return input;
+}
+
+// Displays splash screen on LCD
+void splash() {
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("RFID POS SCANNER");
+    lcd.setCursor(6,1);
+    lcd.print("v1.0");
 }
 
 // Checks if the RFID Module if functional
-void checkNFC()
+boolean checkNFC()
 {
     if (version)
     {
-        Serial.println(1);
+        return true;
     }
-    else
-    {
-        Serial.println(2);
-    }
+    return false;
+}
+
+// TODO Checks if the GSM Module is functional
+boolean checkGSM() {
+    return false;
+}
+
+// TODO Gets GSM Signal Quality
+int getGSMSignal() {
+    return 0;
+}
+
+// TODO Sends an SMS with the GSM Module
+void sendSMS() {
+    buzzerError();
 }
 
 // Waits for an RFID card to be scanned
 // Returns the unique ID of RFID card as 8-character String
 String scan()
 {
+    lcd.clear();
+    lcd.setCursor(0,0);
+    lcd.print("Place your card");
+    lcd.setCursor(0,1);
+    lcd.print("near the scanner");
+
     String stringSerialNumber = "";
     // repeat until the retrieved serial number is 8 characters long
     while (stringSerialNumber.length() != 8)
@@ -102,11 +199,11 @@ String scan()
             }
         }
     }
-    // play tone in buzzer
-    tone(buzzer, 2000);
-    delay(500);
-    noTone(buzzer);
 
+    lcd.clear();
+    lcd.setCursor(2,0);
+    lcd.print("Card Scanned");
+    buzzerSuccess();
     return stringSerialNumber;
 }
 
@@ -216,5 +313,12 @@ void buzzerError()
     delay(250);
     tone(buzzer, 500);
     delay(250);
+    noTone(buzzer);
+}
+
+// Plays success tone for 500ms so I don't have to write these couple lines down every single time
+void buzzerSuccess() {
+    tone(buzzer, 2000);
+    delay(500);
     noTone(buzzer);
 }

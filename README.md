@@ -12,7 +12,7 @@ Parts List:
 
 Functions:
 [RFID]
-1. Test for RFID Scanner Status
+1. Test for RFID Scanner Status - OK
 2. Read RFID Cards and send the unique identifier over Serial - OK
 3. Read RFID Cards and wait for a 6-digit PIN for verification - OK
 

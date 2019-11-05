@@ -98,7 +98,7 @@ void loop()
     }
 }
 
-void scan()
+String scan()
 {
     String stringSerialNumber = "";
     // repeat until the retrieved serial number is 8 characters long
@@ -120,44 +120,76 @@ void scan()
             }
         }
     }
-    Serial.println(stringSerialNumber);
     // play tone in buzzer
     tone(buzzer, 2000);
     delay(500);
     noTone(buzzer);
+
+    return stringSerialNumber;
 }
 
 void secureScan()
 {
-    scan();
+    Serial.println(scan()); // Prints card serial number to be read by Java program to be queried for the correct security code
+    String passcode = "";
+
+    // Wait for 6-digit PIN to arrive. Make sure that on the Java program will only send a 6-character long string of purely numbers
+    while (passcode.length() != 6) {
+        passcode = Serial.readStringUntil('\n');
+    }
+
     String input = "";
-    char pin[6];
-    boolean validPIN;
+    boolean passcodeMatch = false;
+    
+    for (int x = 3; x > 0; x--) {
+        lcd.clear();
+        lcd.setCursor(2,0);
+        lcd.print("PIN :");
+        lcd.setCursor(8,0);
 
-    do
-    {
-        validPIN = true;
-        while (input.length() != 6)
-        {
-            input = Serial.readStringUntil('\n');
-        }
-        Serial.println("received");
-        input.toCharArray(pin, 6);
-        for (char c : pin)
-        {
-            if (!isDigit(c))
-            {
-                validPIN = false;
-            }
+        while (input.length() != 6) {
+            input += keypad();
+            lcd.print("*");
         }
 
-        if (!validPIN)
-        {
-            validPIN = false;
-            Serial.println("PIN Invalid:" + input);
+        if (passcode.equals(input)) {
+            passcodeMatch = true;
+            lcd.clear();
+            lcd.setCursor(2,0);
+            lcd.print("Verification");
+            lcd.setCursor(3,1);
+            lcd.print("Successful");
+            delay(2000);
+            break;
+        }
+        else {
+            lcd.clear();
+            lcd.setCursor(1,0);
+            lcd.print("Incorrect PIN.");
+            lcd.setCursor(1,1);
+            lcd.print(x - 1);
+            lcd.setCursor(3,1);
+            lcd.print("retries left");
+            delay(2000);
             input = "";
         }
-    } while (!validPIN);
+    }
+    
+    // if passcode matches, prints 1
+    // else, prints 2
+    // the java program should be listening for these values after sending the correct passcode
+    if (passcodeMatch) {
+        Serial.println(1);
+    }
+    else {
+        Serial.println(2);
+    }
+}
 
-    Serial.println("PIN Received");
+int keypad() {
+    String input = "";
+    while (input.length() != 1) {
+        input = Serial.readStringUntil('\n');
+    }
+    return input.toInt();
 }

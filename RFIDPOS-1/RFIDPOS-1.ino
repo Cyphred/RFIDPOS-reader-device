@@ -52,11 +52,12 @@ void setup()
     // Initialize RFID Module
     nfc.begin();
     version = nfc.getFirmwareVersion();
+
+    Serial.println('g');
 }
 
 void loop()
 {
-    Serial.println('g');
     splash();
     String command = waitForSerialInput(); // Listening for commands sent over Serial monitor
     // valid commands will result in a '1' being sent to Serial
@@ -100,12 +101,6 @@ void loop()
             else if (command.equals("signal")) {
                 Serial.println(getGSMSignal());
             }
-            else {
-                Serial.println(2);
-            }
-        }
-        else {
-            Serial.println(2);
         }
     }
 
@@ -120,13 +115,13 @@ void loop()
             secureScan();
         }
     }
+    else {
+        Serial.println(2);
+    }
 
     // GSM commands for sending SMS
     else if (command.equals("gsm")) {
         sendSMS();
-    }
-    else {
-        Serial.println(2);
     }
     
 }
@@ -187,6 +182,7 @@ String scan()
     String stringSerialNumber = "";
     // repeat until the retrieved serial number is 8 characters long
     while (stringSerialNumber.length() != 8)
+    {
         // Check if a tag was detected
         // If yes, then variable FoundTag will contain "MI_OK"
         FoundTag = nfc.requestTag(MF1_REQIDL, TagData);
@@ -205,11 +201,9 @@ String scan()
     }
 
     lcd.clear();
-    if (!stringSerialNumber.equals("xxxxxxxx")) {
-        lcd.setCursor(2,0);
-        lcd.print("Card Scanned");
-        buzzerSuccess();
-    }
+    lcd.setCursor(2,0);
+    lcd.print("Card Scanned");
+    buzzerSuccess();
     return stringSerialNumber;
 }
 
@@ -218,7 +212,6 @@ String scan()
 // if a valid
 void secureScan()
 {
-    String scannedSerial = scan();
     Serial.println(scan()); // Prints card serial number to be read by Java program to be queried for the correct security code
     String passcode = "";
 

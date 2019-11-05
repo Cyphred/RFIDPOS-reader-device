@@ -65,6 +65,21 @@ void loop()
     }
 }
 
+// Checks if the RFID Module if functional
+void checkNFC()
+{
+    if (version)
+    {
+        Serial.println(1);
+    }
+    else
+    {
+        Serial.println(2);
+    }
+}
+
+// Waits for an RFID card to be scanned
+// Returns the unique ID of RFID card as 8-character String
 String scan()
 {
     String stringSerialNumber = "";
@@ -95,6 +110,9 @@ String scan()
     return stringSerialNumber;
 }
 
+// Waits for an RFID to be scanned
+// then waits for a corresponding passcode to be fetched from DB
+// if a valid
 void secureScan()
 {
     Serial.println(scan()); // Prints card serial number to be read by Java program to be queried for the correct security code
@@ -102,53 +120,60 @@ void secureScan()
 
     // Wait for 6-digit PIN to arrive. Make sure that on the Java program will only send a 6-character long string of purely numbers
     lcd.clear();
-    lcd.setCursor(2,0);
+    lcd.setCursor(2, 0);
     lcd.print("Verifying...");
-    while (passcode.length() != 6) {
+    while (passcode.length() != 6)
+    {
         passcode = Serial.readStringUntil('\n');
     }
 
     // Java program will send "xxxxxx" if the scanned RFID tag does not exist in the database
     // othewise, proceed with the verification process
-    if (passcode.equals("xxxxxx")) {
+    if (passcode.equals("xxxxxx"))
+    {
         lcd.clear();
-        lcd.setCursor(2,0);
+        lcd.setCursor(2, 0);
         lcd.print("Card Invalid");
         buzzerError();
         delay(1250);
     }
-    else {
+    else
+    {
         String input = "";
         boolean passcodeMatch = false;
-        
-        for (int x = 3; x > 0; x--) {
-            lcd.clear();
-            lcd.setCursor(2,0);
-            lcd.print("PIN :");
-            lcd.setCursor(8,0);
 
-            while (input.length() != 6) {
+        for (int x = 3; x > 0; x--)
+        {
+            lcd.clear();
+            lcd.setCursor(2, 0);
+            lcd.print("PIN :");
+            lcd.setCursor(8, 0);
+
+            while (input.length() != 6)
+            {
                 input += keypad();
                 lcd.print("*");
             }
 
-            if (passcode.equals(input)) {
+            if (passcode.equals(input))
+            {
                 passcodeMatch = true;
                 lcd.clear();
-                lcd.setCursor(2,0);
+                lcd.setCursor(2, 0);
                 lcd.print("Verification");
-                lcd.setCursor(3,1);
+                lcd.setCursor(3, 1);
                 lcd.print("Successful");
                 delay(2000);
                 break;
             }
-            else {
+            else
+            {
                 lcd.clear();
-                lcd.setCursor(1,0);
+                lcd.setCursor(1, 0);
                 lcd.print("Incorrect PIN.");
-                lcd.setCursor(1,1);
+                lcd.setCursor(1, 1);
                 lcd.print(x - 1);
-                lcd.setCursor(3,1);
+                lcd.setCursor(3, 1);
                 lcd.print("retries left");
                 buzzerError();
                 delay(1250);
@@ -159,24 +184,32 @@ void secureScan()
         // if passcode matches, prints 1
         // else, prints 2
         // the java program should be listening for these values after sending the correct passcode
-        if (passcodeMatch) {
+        if (passcodeMatch)
+        {
             Serial.println(1);
         }
-        else {
+        else
+        {
             Serial.println(2);
         }
     }
 }
 
-int keypad() {
+// Temporary keypad that works through single-character inputs through the serial monitor
+// Will get rid of this when the actual keypad component arrives
+int keypad()
+{
     String input = "";
-    while (input.length() != 1) {
+    while (input.length() != 1)
+    {
         input = Serial.readStringUntil('\n');
     }
     return input.toInt();
 }
 
-void buzzerError() {
+// Plays an error tone for 750ms so I don't have to write these couple lines down every single time
+void buzzerError()
+{
     tone(buzzer, 500);
     delay(250);
     noTone(buzzer);

@@ -52,8 +52,6 @@ void setup()
     // Initialize RFID Module
     nfc.begin();
     version = nfc.getFirmwareVersion();
-
-    Serial.println('g');
 }
 
 void loop()
@@ -104,24 +102,21 @@ void loop()
         }
     }
 
-    // Scan commands for RFID Card scanning operations
+    // Scan RFID Card and send its Serial number
     else if (command.equals("scan")) {
-        Serial.println(1);
-        command = waitForSerialInput();
-        if (command.equals("0")) {
-            Serial.println(scan());
-        }
-        else if (command.equals("1")) {
-            secureScan();
-        }
+        Serial.println(scan());
     }
-    else {
-        Serial.println(2);
+
+    else if (command.equals("challenge")) {
+        challenge();
     }
 
     // GSM commands for sending SMS
     else if (command.equals("gsm")) {
         sendSMS();
+    }
+    else {
+        Serial.println(2);
     }
     
 }
@@ -210,86 +205,69 @@ String scan()
 // Waits for an RFID to be scanned
 // then waits for a corresponding passcode to be fetched from DB
 // if a valid
-void secureScan()
+void challenge()
 {
-    Serial.println(scan()); // Prints card serial number to be read by Java program to be queried for the correct security code
-    String passcode = "";
-
     // Wait for 6-digit PIN to arrive. Make sure that on the Java program will only send a 6-character long string of purely numbers
-    lcd.clear();
-    lcd.setCursor(2, 0);
-    lcd.print("Verifying...");
+    String passcode = "";
     while (passcode.length() != 6)
     {
         passcode = Serial.readStringUntil('\n');
     }
 
-    // Java program will send "xxxxxx" if the scanned RFID tag does not exist in the database
-    // othewise, proceed with the verification process
-    if (passcode.equals("xxxxxx"))
+    String input = "";
+    boolean passcodeMatch = false;
+
+    for (int x = 3; x > 0; x--)
     {
         lcd.clear();
         lcd.setCursor(2, 0);
-        lcd.print("Card Invalid");
-        buzzerError();
-        delay(1250);
-    }
-    else
-    {
-        String input = "";
-        boolean passcodeMatch = false;
+        lcd.print("PIN :");
+        lcd.setCursor(8, 0);
 
-        for (int x = 3; x > 0; x--)
+        while (input.length() != 6)
         {
-            lcd.clear();
-            lcd.setCursor(2, 0);
-            lcd.print("PIN :");
-            lcd.setCursor(8, 0);
-
-            while (input.length() != 6)
-            {
-                input += keypad();
-                lcd.print("*");
-            }
-
-            if (passcode.equals(input))
-            {
-                passcodeMatch = true;
-                lcd.clear();
-                lcd.setCursor(2, 0);
-                lcd.print("Verification");
-                lcd.setCursor(3, 1);
-                lcd.print("Successful");
-                delay(2000);
-                break;
-            }
-            else
-            {
-                lcd.clear();
-                lcd.setCursor(1, 0);
-                lcd.print("Incorrect PIN.");
-                lcd.setCursor(1, 1);
-                lcd.print(x - 1);
-                lcd.setCursor(3, 1);
-                lcd.print("retries left");
-                buzzerError();
-                delay(1250);
-                input = "";
-            }
+            input += keypad();
+            lcd.print("*");
         }
 
-        // if passcode matches, prints 1
-        // else, prints 2
-        // the java program should be listening for these values after sending the correct passcode
-        if (passcodeMatch)
+        if (passcode.equals(input))
         {
-            Serial.println(1);
+            passcodeMatch = true;
+            lcd.clear();
+            lcd.setCursor(2, 0);
+            lcd.print("Verification");
+            lcd.setCursor(3, 1);
+            lcd.print("Successful");
+            delay(2000);
+            break;
         }
         else
         {
-            Serial.println(2);
+            lcd.clear();
+            lcd.setCursor(1, 0);
+            lcd.print("Incorrect PIN.");
+            lcd.setCursor(1, 1);
+            lcd.print(x - 1);
+            lcd.setCursor(3, 1);
+            lcd.print("retries left");
+            buzzerError();
+            delay(1250);
+            input = "";
         }
     }
+
+    // if passcode matches, prints "ok"
+    // else, prints "no"
+    // the java program should be listening for these values after sending the correct passcode
+    if (passcodeMatch)
+    {
+        Serial.println("ok");
+    }
+    else
+    {
+        Serial.println("no");
+    }
+    
 }
 
 // Temporary keypad that works through single-character inputs through the serial monitor

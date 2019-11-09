@@ -20,7 +20,8 @@
 #include <Wire.h>              // Library for I2C communication
 #include <LiquidCrystal_I2C.h> // Library for LCD
 #include <MFRC522.h>           // RFID Module Library
-#include <SPI.h>               // Used for communication via SPI with the RFID Module
+#include <SPI.h>               // Library for communication via SPI with the RFID Module
+#include <Keypad.h>            // Library for Keypad support
 
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
 #define RESETPIN 9 // RFID Module RESET Pin connected to digital pin
@@ -31,6 +32,33 @@ byte TagData[MAX_LEN];                                  // full tag data
 byte TagSerialNumber[5];                                // tag serial number
 byte GoodTagSerialNumber[5] = {0x95, 0xEB, 0x17, 0x53}; // The Tag Serial number we are looking for
 byte version;                                           // Variable to store Firmware version of the Module
+
+const byte keypadRows = 4; // Keypad Rows
+const byte keypadCols = 3; // Keypad Columns
+// Keymap for the keypad
+char keys[keypadRows][keypadCols] = {
+  {'1','2','3'},
+  {'4','5','6'},
+  {'7','8','9'},
+  {'A','0','B'}
+};
+// Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
+byte rowPins[ROWS] = {5,0,A2,3};
+// Connect keypad COL0, COL1 and COL2 to these Arduino pins.
+byte colPins[COLS] = {4,6,2}; 
+/**
+ * To get the pinouts of the keypad, rotate it counter-clockwise, from top to bottom pins:
+ * 1 - ROW1
+ * 2 - ROW2
+ * 3 - COL2
+ * 4 - ROW3
+ * 5 - COL0
+ * 6 - ROW0
+ * 7 - COL1
+ **/
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCols); // Initializes the keypad
+// To get the char from the keypad, char key = keypad.getKey();
+// then if (key) to check for a valid key
 
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LCD Library
 MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RFID Reader with declared pinouts for SDA and RESET

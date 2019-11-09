@@ -40,21 +40,21 @@ char keys[keypadRows][keypadCols] = {
   {'1','2','3'},
   {'4','5','6'},
   {'7','8','9'},
-  {'A','0','B'}
+  {'X','0','O'}
 };
 // Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
-byte rowPins[ROWS] = {5,0,A2,3};
+byte rowPins[keypadRows] = {5,0,A2,3};
 // Connect keypad COL0, COL1 and COL2 to these Arduino pins.
-byte colPins[COLS] = {4,6,2}; 
+byte colPins[keypadCols] = {4,6,2}; 
 /**
  * To get the pinouts of the keypad, rotate it counter-clockwise, from top to bottom pins:
- * 1 - ROW1
- * 2 - ROW2
- * 3 - COL2
- * 4 - ROW3
- * 5 - COL0
- * 6 - ROW0
- * 7 - COL1
+ * 1 - ROW1 - D0
+ * 2 - ROW2 - A2
+ * 3 - COL2 - D2
+ * 4 - ROW3 - D3
+ * 5 - COL0 - D4
+ * 6 - ROW0 - D5
+ * 7 - COL1 - D6
  **/
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCols); // Initializes the keypad
 // To get the char from the keypad, char key = keypad.getKey();
@@ -254,7 +254,7 @@ void challenge()
 
         while (input.length() != 6)
         {
-            input += keypad();
+            input += keypadInput();
             lcd.print("*");
         }
 
@@ -298,16 +298,15 @@ void challenge()
     
 }
 
-// Temporary keypad that works through single-character inputs through the serial monitor
-// Will get rid of this when the actual keypad component arrives
-int keypad()
-{
-    String input = "";
-    while (input.length() != 1)
-    {
-        input = Serial.readStringUntil('\n');
+String keypadInput() {
+    String returnValue = "";
+    while (returnValue.length() != 1) {
+        char key = keypad.getKey();
+        if (key) {
+            returnValue += key;
+        }
     }
-    return input.toInt();
+    return returnValue;
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time

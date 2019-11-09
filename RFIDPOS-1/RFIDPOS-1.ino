@@ -40,7 +40,7 @@ char keys[keypadRows][keypadCols] = {
   {'1','2','3'},
   {'4','5','6'},
   {'7','8','9'},
-  {'X','0','O'}
+  {'*','0','#'}
 };
 // Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
 byte rowPins[keypadRows] = {5,0,A2,3};
@@ -143,6 +143,11 @@ void loop()
     else if (command.equals("gsm")) {
         sendSMS();
     }
+
+    else if (command.equals("newpass")) {
+        Serial.println(newPINInput());
+    }
+
     else {
         Serial.println(2);
     }
@@ -254,8 +259,11 @@ void challenge()
 
         while (input.length() != 6)
         {
-            input += keypadInput();
-            lcd.print("*");
+            String tempInput = keypadInput();
+            if (!tempInput.equals("*") && !tempInput.equals("#")) {
+                input += tempInput;
+                lcd.print("*");
+            }
         }
 
         if (passcode.equals(input))
@@ -298,6 +306,7 @@ void challenge()
     
 }
 
+// Waits for a key to be pressed before returning the pressed number
 String keypadInput() {
     String returnValue = "";
     while (returnValue.length() != 1) {
@@ -307,6 +316,106 @@ String keypadInput() {
         }
     }
     return returnValue;
+}
+
+// Asks customer to input a new PIN twice, for confirmation
+String newPINInput() {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Enter PIN:");
+    lcd.setCursor(10,0);
+
+    String input1 = ""; // first input
+    String input2 = ""; // second input, for verification purposes
+    boolean done = false;
+
+    // keep looping until input length is 6 characters, and the "OK" button is pressed
+    while (input1.length() != 6 || !done)
+    {
+        String tempInput = keypadInput(); // waits until the keypad is pressed and returns a character
+
+        // if pressed button is not the "OK" or "backspace" button, add returned charater to the current input and display an asterisk on the LCD
+        if (!tempInput.equals("*") && !tempInput.equals("#")) {
+            input1 += tempInput;
+            lcd.print("*");
+        }
+
+        // if "backspace" button is pressed, remove the last character from the current input
+        else if (tempInput.equals("#") && tempInput.length() >= 1) {
+            char inputCharArray[6];
+            input1.toCharArray(inputCharArray, input1.length());
+            input1 = String(inputCharArray);
+
+            lcd.setCursor(10,0);
+            lcd.print("      ");
+            lcd.setCursor(10,0);
+            for (int x = 0; x < input1.length(); x++) {
+                lcd.print("*");
+            }
+        }
+        else if (tempInput.equals("*") && input1.length() == 6) {
+            done = true;
+            buzzerSuccess();
+        }
+    }
+
+    done = false;
+    lcd.clear();
+    lcd.setCursor(2, 0);
+    lcd.print("Confirm:");
+    lcd.setCursor(10,0);
+
+    // keep looping until input length is 6 characters, and the "OK" button is pressed
+    while (input2.length() != 6 || !done)
+    {
+        String tempInput = keypadInput(); // waits until the keypad is pressed and returns a character
+
+        // if pressed button is not the "OK" or "backspace" button, add returned charater to the current input and display an asterisk on the LCD
+        if (!tempInput.equals("*") && !tempInput.equals("#")) {
+            input2 += tempInput;
+            lcd.print("*");
+        }
+
+        // if "backspace" button is pressed, remove the last character from the current input
+        else if (tempInput.equals("#") && tempInput.length() >= 1) {
+            char inputCharArray[6];
+            input2.toCharArray(inputCharArray, input2.length());
+            input2 = String(inputCharArray);
+
+            lcd.setCursor(10,0);
+            lcd.print("      ");
+            lcd.setCursor(10,0);
+            for (int x = 0; x < input2.length(); x++) {
+                lcd.print("*");
+            }
+        }
+        else if (tempInput.equals("*") && input2.length() == 6) {
+            if (input1.equals(input2)) {
+                done = true;
+                lcd.clear();
+                lcd.setCursor(1,0);
+                lcd.print("PIN Confirmed!");
+                buzzerSuccess();
+                delay(1500);
+            }
+            else {
+                input2 = "";
+                lcd.clear();
+                lcd.setCursor(2,0);
+                lcd.print("PIN Mismatch");
+                lcd.setCursor(0,1);
+                lcd.print("please try again");
+                buzzerError();
+                delay(1250);
+                lcd.clear();
+                lcd.setCursor(2, 0);
+                lcd.print("Confirm:");
+                lcd.setCursor(10,0);
+            }
+        }
+    }
+
+    return input1;
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time

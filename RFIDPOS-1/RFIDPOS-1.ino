@@ -245,6 +245,8 @@ void scan()
                     }
                     stringSerialNumber += String(TagSerialNumber[i], HEX);
                 }
+
+                stringSerialNumber.toUpperCase();
             }
         }
     }

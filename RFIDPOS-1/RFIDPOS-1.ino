@@ -223,9 +223,21 @@ String scan()
             memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
             // Loop to print serial number to serial monitor
             stringSerialNumber = "";
-            for (int i = 0; i < 4; i++)
-            {
-                stringSerialNumber += String(TagSerialNumber[i], HEX);
+
+            // it tag data does not start with 0 and 32
+            // I've noticed incompletely-read tag data tends to start with 0 and 32 as the firt 2 bytes
+            if (!(TagSerialNumber[0] == 0 && TagSerialNumber[1] == 32)) {
+                // iterates 4 times to get the first 4 decimal values representing the scanned card's unique ID
+                // and converts it into a hex value, then stores it as a string
+                for (int i = 0; i < 4; i++)
+                {
+                    // if the decimal value is lesser than 16, it is going to start with a zero
+                    // Casting into a String does not retain that zero, so it must be added manually
+                    if (TagSerialNumber[i] < 16) {
+                        stringSerialNumber += 0;
+                    }
+                    stringSerialNumber += String(TagSerialNumber[i], HEX);
+                }
             }
         }
     }

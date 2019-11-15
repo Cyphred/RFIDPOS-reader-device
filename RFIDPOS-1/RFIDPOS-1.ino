@@ -60,6 +60,7 @@ MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RF
 
 int menuState = 1;
 const int buzzer = A3;
+String lastReadIDSerialNumber = "";
 
 void setup()
 {
@@ -127,7 +128,12 @@ void loop()
 
     // Scan RFID Card and send its Serial number
     else if (command.equals("scan")) {
-        Serial.println(scan());
+        scan();
+    }
+
+    // Prints last read Card ID Serial Number to Serial Monitor
+    else if (command.equals("getSerial")) {
+        Serial.println(lastReadIDSerialNumber);
     }
 
     else if (command.equals("challenge")) {
@@ -194,7 +200,7 @@ void sendSMS() {
 
 // Waits for an RFID card to be scanned
 // Returns the unique ID of RFID card as 8-character String
-String scan()
+void scan()
 {
     byte FoundTag;                                          // value to tell if a tag is found
     byte ReadTag;                                           // Anti-collision value to read tag information
@@ -246,7 +252,7 @@ String scan()
     lcd.setCursor(2,0);
     lcd.print("Card Scanned");
     buzzerSuccess();
-    return stringSerialNumber;
+    lastReadIDSerialNumber = stringSerialNumber;
 }
 
 // Waits for an RFID to be scanned

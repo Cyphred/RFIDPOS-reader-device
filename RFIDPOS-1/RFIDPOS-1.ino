@@ -149,8 +149,9 @@ void loop()
         Serial.println(newPINInput());
     }
 
+    // Prints '100' when received command is not recognized
     else {
-        Serial.println(2);
+        Serial.println(100);
     }
     
 }

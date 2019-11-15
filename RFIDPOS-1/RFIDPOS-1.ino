@@ -1,6 +1,7 @@
 /*
 [PINOUTS]
-  RC522 - https://www.brainy-bits.com/card-reader-with-an-arduino-rfid-using-the-rc522-module/
+  [RC522] - https://github.com/ljos/MFRC522
+          - https://www.brainy-bits.com/card-reader-with-an-arduino-rfid-using-the-rc522-module/
     - 3.3V -> 3.3V
     - RST -> 9
     - GND -> GND
@@ -10,11 +11,33 @@
     - MISO -> 12
     - SCK -> 13
 
-  I2C LCD - https://www.makerguides.com/character-i2c-lcd-arduino-tutorial/
+  [I2C LCD] - https://github.com/johnrickman/LiquidCrystal_I2C
+            - https://www.makerguides.com/character-i2c-lcd-arduino-tutorial/
     - VCC -> 5V
     - GND -> GND
     - SDA -> A4
     - SCL -> A5
+
+  [Keypad] - https://github.com/Chris--A/Keypad
+           - https://playground.arduino.cc/Code/Keypad/
+    Note: To get the pinouts of the keypad, rotate it counter-clockwise, from top to bottom pins:
+    1 - ROW1 -> D0
+    2 - ROW2 -> A2
+    3 - COL2 -> D2
+    4 - ROW3 -> D3
+    5 - COL0 -> D4
+    6 - ROW0 -> D5
+    7 - COL1 -> D6
+
+  [Buzzer]
+    + -> A3
+    - -> GND
+
+  [GSM Module] - https://www.ayomaonline.com/programming/quickstart-sim800-sim800l-with-arduino/
+    VCC -> 5V
+    GND -> GND
+    SIM_TXD -> D8
+    SIM_RXD -> D7
 */
 
 #include <Wire.h>              // Library for I2C communication
@@ -26,8 +49,7 @@
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
 #define RESETPIN 9 // RFID Module RESET Pin connected to digital pin
 
-byte version;                                           // Variable to store Firmware version of the Module
-
+byte version; // Variable to store Firmware version of the RFID Module
 const byte keypadRows = 4; // Keypad Rows
 const byte keypadCols = 3; // Keypad Columns
 // Keymap for the keypad
@@ -37,28 +59,11 @@ char keys[keypadRows][keypadCols] = {
   {'7','8','9'},
   {'*','0','#'}
 };
-// Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
-byte rowPins[keypadRows] = {5,0,A2,3};
-// Connect keypad COL0, COL1 and COL2 to these Arduino pins.
-byte colPins[keypadCols] = {4,6,2}; 
-/**
- * To get the pinouts of the keypad, rotate it counter-clockwise, from top to bottom pins:
- * 1 - ROW1 - D0
- * 2 - ROW2 - A2
- * 3 - COL2 - D2
- * 4 - ROW3 - D3
- * 5 - COL0 - D4
- * 6 - ROW0 - D5
- * 7 - COL1 - D6
- **/
-Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCols); // Initializes the keypad
-// To get the char from the keypad, char key = keypad.getKey();
-// then if (key) to check for a valid key
-
+byte rowPins[keypadRows] = {5,0,A2,3}; // Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
+byte colPins[keypadCols] = {4,6,2};  // Connect keypad COL0, COL1 and COL2 to these Arduino pins.
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCols); // Initializes the keypad. To get the char from the keypad, char key = keypad.getKey(); then if (key) to check for a valid key
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LCD Library
 MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RFID Reader with declared pinouts for SDA and RESET
-
-int menuState = 1;
 const int buzzer = A3;
 String lastReadIDSerialNumber = "";
 
@@ -80,12 +85,13 @@ void setup()
 
 void loop()
 {
-    splash();
+    splash(); // Show splash screen when device is idle
     String command = waitForSerialInput(); // Listening for commands sent over Serial monitor
-    // valid commands will result in a '1' being sent to Serial
-    // otherwise, a '2' is sent
+    // valid commands will result in a '1' being sent to Serial. Otherwise, a '100' is sent
 
-    // check commands for testing specific components and connectivity for easier troubleshooting
+    // 'check' commands for testing specific components and connectivity for easier troubleshooting
+    // Valid Commands: 'check nfc', 'check gsm'
+    // returns 100 if command is invalid
     if (command.equals("check")) {
         Serial.println(1);
         command = waitForSerialInput();
@@ -124,6 +130,9 @@ void loop()
                 Serial.println(getGSMSignal());
             }
         }
+        else {
+            Serial.println(100);
+        }
     }
 
     // Scan RFID Card and send its Serial number
@@ -156,7 +165,7 @@ void loop()
     
 }
 
-// Waits for any input to arrive via serial
+// Waits for any data to arrive via serial and returns it as a String
 String waitForSerialInput() {
     String input = "";
     while (input.length() == 0) {
@@ -165,7 +174,7 @@ String waitForSerialInput() {
     return input;
 }
 
-// Displays splash screen on LCD
+// Prints splash screen to LCD
 void splash() {
     lcd.clear();
     lcd.setCursor(0,0);
@@ -174,7 +183,7 @@ void splash() {
     lcd.print("v1.0");
 }
 
-// Checks if the RFID Module if functional
+// Checks if the RFID Module if connected
 boolean checkNFC()
 {
     if (version)
@@ -209,13 +218,14 @@ void scan()
     byte TagSerialNumber[5];                                // tag serial number
     byte GoodTagSerialNumber[5] = {0x95, 0xEB, 0x17, 0x53}; // The Tag Serial number we are looking for
 
+    // Prompts customer to scan their RFID card
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Place your card");
     lcd.setCursor(0,1);
     lcd.print("near the scanner");
 
-    String stringSerialNumber = "";
+    String stringSerialNumber = ""; // String to temporarily store converted tag data
     // repeat until the retrieved serial number is 8 characters long
     while (stringSerialNumber.length() != 8)
     {
@@ -246,11 +256,12 @@ void scan()
                     stringSerialNumber += String(TagSerialNumber[i], HEX);
                 }
 
-                stringSerialNumber.toUpperCase();
+                stringSerialNumber.toUpperCase(); // Convert retrieved Serial Number to all uppercase
             }
         }
     }
 
+    // Notifies user of successful scan through displayed text on the LCD and a beep
     lcd.clear();
     lcd.setCursor(2,0);
     lcd.print("Card Scanned");
@@ -258,19 +269,18 @@ void scan()
     lastReadIDSerialNumber = stringSerialNumber;
 }
 
-// Waits for an RFID to be scanned
-// then waits for a corresponding passcode to be fetched from DB
-// if a valid
+// Challenges customer to match a given PIN number
+// TODO Make an accessible variable for easy changing allowed number of attempts
 void challenge()
 {
-    // Wait for 6-digit PIN to arrive. Make sure that on the Java program will only send a 6-character long string of purely numbers
+    // Wait for 6-digit PIN to arrive in Serial. Make sure that on the Java program will only send a 6-character long string of purely numbers
     String passcode = "";
     while (passcode.length() != 6)
     {
         passcode = Serial.readStringUntil('\n');
     }
 
-    String input = "";
+    String input = ""; // Temporarily stores the input from the customer
     boolean passcodeMatch = false;
 
     for (int x = 3; x > 0; x--)
@@ -280,6 +290,9 @@ void challenge()
         lcd.print("PIN :");
         lcd.setCursor(8, 0);
 
+        // While the entered PIN length is not complete, wait for more inputs
+        // FIXME make keypad do live inputs to the Java Program? Not sure about how to go with this yet
+        // TODO Make an 'OK' and 'BACKSPACE' button
         while (input.length() != 6)
         {
             String tempInput = keypadInput();
@@ -289,6 +302,7 @@ void challenge()
             }
         }
 
+        // if entered PIN matches the PIN retrieved from the database
         if (passcode.equals(input))
         {
             passcodeMatch = true;
@@ -300,6 +314,8 @@ void challenge()
             delay(2000);
             break;
         }
+
+        // if entered PIN DOES NOT match the PIN retrieved from the database
         else
         {
             lcd.clear();
@@ -315,9 +331,10 @@ void challenge()
         }
     }
 
-    // if passcode matches, prints "ok"
-    // else, prints "no"
+    // if passcode matches, prints "ok" to Serial
+    // else, prints "no" to Serial
     // the java program should be listening for these values after sending the correct passcode
+    // TODO Fix the Java code to be triggered by the DATA_RECEIVED event
     if (passcodeMatch)
     {
         Serial.println("ok");
@@ -329,7 +346,7 @@ void challenge()
     
 }
 
-// Waits for a key to be pressed before returning the pressed number
+// Waits for a key on the keypad to be pressed before returning the pressed number
 String keypadInput() {
     String returnValue = "";
     while (returnValue.length() != 1) {
@@ -376,6 +393,8 @@ String newPINInput() {
                 lcd.print("*");
             }
         }
+
+        // if "ok" button is pressed and PIN length is satisfied, finish the first input of PIN and move on to re-entering for verification
         else if (tempInput.equals("*") && input1.length() == 6) {
             done = true;
             buzzerSuccess();
@@ -412,7 +431,10 @@ String newPINInput() {
                 lcd.print("*");
             }
         }
+
+        // if "ok" button is pressed and PIN length is satisfied
         else if (tempInput.equals("*") && input2.length() == 6) {
+            // if re-entered PIN matches
             if (input1.equals(input2)) {
                 done = true;
                 lcd.clear();
@@ -421,6 +443,7 @@ String newPINInput() {
                 buzzerSuccess();
                 delay(1500);
             }
+            // if re-entered PIN DOES NOT match
             else {
                 input2 = "";
                 lcd.clear();

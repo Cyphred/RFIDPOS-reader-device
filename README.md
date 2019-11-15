@@ -13,14 +13,13 @@ Parts List:
 Functions:
 [GENERAL]
 1. Cancel an operation
-2. Ask for PIN input (for creating new accounts)
 
 [RFID]
 1. Test for RFID Scanner Status - OK
 2. Read RFID Cards and send the unique identifier over Serial - OK
 3. Read RFID Cards and wait for a 6-digit PIN for verification - [Updated, see #4]
 4. Challenge user for correct PIN/Paasscode - OK
-5. Make the device hold the scanned serial number until it has confirmed that the Java program has received it
+5. Make the device hold the scanned serial number until the Java program has requested it - OK
 
 [GSM]
 1. Test for GSM Module Status
@@ -28,5 +27,6 @@ Functions:
 3. Send SMS
 
 [Keypad]
-1. Input functionality
-
+1. Input functionality - OK
+2. Ask for PIN input (for creating new accounts) - OK
+3. Challenge customer for PIN - OK

@@ -26,11 +26,6 @@
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
 #define RESETPIN 9 // RFID Module RESET Pin connected to digital pin
 
-byte FoundTag;                                          // value to tell if a tag is found
-byte ReadTag;                                           // Anti-collision value to read tag information
-byte TagData[MAX_LEN];                                  // full tag data
-byte TagSerialNumber[5];                                // tag serial number
-byte GoodTagSerialNumber[5] = {0x95, 0xEB, 0x17, 0x53}; // The Tag Serial number we are looking for
 byte version;                                           // Variable to store Firmware version of the Module
 
 const byte keypadRows = 4; // Keypad Rows
@@ -201,6 +196,12 @@ void sendSMS() {
 // Returns the unique ID of RFID card as 8-character String
 String scan()
 {
+    byte FoundTag;                                          // value to tell if a tag is found
+    byte ReadTag;                                           // Anti-collision value to read tag information
+    byte TagData[MAX_LEN];                                  // full tag data
+    byte TagSerialNumber[5];                                // tag serial number
+    byte GoodTagSerialNumber[5] = {0x95, 0xEB, 0x17, 0x53}; // The Tag Serial number we are looking for
+
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Place your card");
@@ -221,6 +222,7 @@ String scan()
             ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
             memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
             // Loop to print serial number to serial monitor
+            stringSerialNumber = "";
             for (int i = 0; i < 4; i++)
             {
                 stringSerialNumber += String(TagSerialNumber[i], HEX);

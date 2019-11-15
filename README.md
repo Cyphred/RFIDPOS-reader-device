@@ -20,6 +20,7 @@ Functions:
 2. Read RFID Cards and send the unique identifier over Serial - OK
 3. Read RFID Cards and wait for a 6-digit PIN for verification - [Updated, see #4]
 4. Challenge user for correct PIN/Paasscode - OK
+5. Make the device hold the scanned serial number until it has confirmed that the Java program has received it
 
 [GSM]
 1. Test for GSM Module Status

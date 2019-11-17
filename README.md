@@ -12,7 +12,7 @@ RFID Card Reader device to complement POS Implementation in Java
 
 ## II. Functions
 ##### A. GENERAL
-1. Cancel an operation
+- [ ] Cancel an operation
 
 ##### B. RFID
 - [x] Test for RFID Scanner Status

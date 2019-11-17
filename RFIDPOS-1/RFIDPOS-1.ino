@@ -66,7 +66,7 @@ LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LC
 MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RFID Reader with declared pinouts for SDA and RESET
 const int buzzer = A3;
 const int challengeAttempts = 3;
-String lastReadIDSerialNumber = "";
+String lastSentData = "";
 boolean connectedToJava = false;
 
 void setup()
@@ -84,8 +84,10 @@ void setup()
     nfc.begin();
     version = nfc.getFirmwareVersion();
 
-    Serial.println(99);
+    send(1);
 }
+
+int timesAsked = 0;
 
 void loop()
 {
@@ -106,19 +108,25 @@ void loop()
             lcd.print("Established!");
             buzzerSuccess();
             delay(1500);
-            Serial.println(1);
+            send(2);
+        }
+        else if (startSignal.equals("sendAgain")) {
+            Serial.println(lastSentData);
         }
     }
+
+    // if connected to POS Software
     else {
         splash(); // Show splash screen when device is idle
-        String command = waitForSerialInput(); // Listening for commands sent over Serial monitor
-        // valid commands will result in a '1' being sent to Serial. Otherwise, a '100' is sent
+
+        // Listening for commands sent over Serial monitor
+        // invalid commands will result in a '9' being sent to Serial
+        String command = waitForSerialInput();
 
         // 'check' commands for testing specific components and connectivity for easier troubleshooting
         // Valid Commands: 'check nfc', 'check gsm'
         // returns 100 if command is invalid
         if (command.equals("check")) {
-            Serial.println(1);
             command = waitForSerialInput();
 
             // testing RFID Module
@@ -126,15 +134,14 @@ void loop()
             // returns '2' if not
             if (command.equals("nfc")) {
                 if (checkNFC()) {
-                    Serial.println(1);
+                    send(1);
                 }
                 else {
-                    Serial.println(0);
+                    send(0);
                 }
             }
             // testing GSM Module
             else if (command.equals("gsm")) {
-                Serial.println(1);
                 command = waitForSerialInput();
 
                 // testing GSM Module
@@ -142,28 +149,27 @@ void loop()
                 // returns '2' if not
                 if (command.equals("status")) {
                     if (checkGSM()) {
-                        Serial.println(1);
+                        send(1);
                     }
                     else {
-                        Serial.println(0);
+                        send(0);
                     }
                 }
 
                 // testing GSM Module signal
                 // prints integer value to Serial
                 else if (command.equals("signal")) {
-                    Serial.println(getGSMSignal());
+                    send(getGSMSignal());
                 }
             }
             else {
-                Serial.println(100);
+                send(100);
             }
         }
 
         // Scan RFID Card and send its Serial number
         else if (command.equals("scan")) {
             scan();
-            Serial.println(lastReadIDSerialNumber);
         }
 
         else if (command.equals("challenge")) {
@@ -179,9 +185,14 @@ void loop()
             newPINInput();
         }
 
+        // Prints the last scanned ID to serial monitor for future retrieval in case Java program does not receive complete data
+        else if (command.equals("sendAgain")) {
+            Serial.println(lastSentData);
+        }
+
         // Prints '100' when received command is not recognized
         else {
-            Serial.println(100);
+            Serial.println(9); // Note: DO NOT use send() for sending error code 9
         }
     }
 }
@@ -287,7 +298,7 @@ void scan()
     lcd.setCursor(2,0);
     lcd.print("Card Scanned");
     buzzerSuccess();
-    lastReadIDSerialNumber = stringSerialNumber;
+    send(stringSerialNumber);
 }
 
 // Challenges customer to match a given PIN number
@@ -350,16 +361,16 @@ void challenge()
         }
     }
 
-    // if passcode matches, prints "ok" to Serial
-    // else, prints "no" to Serial
+    // if passcode matches, prints "1" to Serial
+    // else, prints "0" to Serial
     // the java program should be listening for these values after sending the correct passcode
     if (passcodeMatch)
     {
-        Serial.println(1);
+        send(1);
     }
     else
     {
-        Serial.println(0);
+        send(0);
     }
     
 }
@@ -479,7 +490,7 @@ void newPINInput() {
         }
     }
 
-    Serial.println(input1);
+    send(input1);
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time
@@ -499,4 +510,18 @@ void buzzerSuccess() {
     tone(buzzer, 2000);
     delay(500);
     noTone(buzzer);
+}
+
+int timesSent = 0;
+
+// saves data before sending it to the Serial monitor in case it is requsted again
+void send(String data) {
+    Serial.println(data);
+    lastSentData = data;
+}
+
+// saves data before sending it to the Serial monitor in case it is requsted again
+void send(int data) {
+    Serial.println(data);
+    lastSentData = data;
 }

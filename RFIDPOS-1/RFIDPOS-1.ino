@@ -105,7 +105,7 @@ void loop()
                 Serial.println(1);
             }
             else {
-                Serial.println(2);
+                Serial.println(0);
             }
         }
         // testing GSM Module
@@ -121,7 +121,7 @@ void loop()
                     Serial.println(1);
                 }
                 else {
-                    Serial.println(2);
+                    Serial.println(0);
                 }
             }
 
@@ -139,7 +139,7 @@ void loop()
     // Scan RFID Card and send its Serial number
     else if (command.equals("scan")) {
         scan();
-        Serial.println("scannedID=" + lastReadIDSerialNumber);
+        Serial.println(lastReadIDSerialNumber);
     }
 
     else if (command.equals("challenge")) {
@@ -329,7 +329,6 @@ void challenge()
     // if passcode matches, prints "ok" to Serial
     // else, prints "no" to Serial
     // the java program should be listening for these values after sending the correct passcode
-    Serial.print("challenge=");
     if (passcodeMatch)
     {
         Serial.println(1);
@@ -456,7 +455,7 @@ void newPINInput() {
         }
     }
 
-    Serial.println("newPIN=" + input1);
+    Serial.println(input1);
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time

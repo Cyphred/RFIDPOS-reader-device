@@ -65,6 +65,7 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCol
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LCD Library
 MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RFID Reader with declared pinouts for SDA and RESET
 const int buzzer = A3;
+const int challengeAttempts = 3;
 String lastReadIDSerialNumber = "";
 
 void setup()
@@ -138,11 +139,7 @@ void loop()
     // Scan RFID Card and send its Serial number
     else if (command.equals("scan")) {
         scan();
-    }
-
-    // Prints last read Card ID Serial Number to Serial Monitor
-    else if (command.equals("getSerial")) {
-        Serial.println(lastReadIDSerialNumber);
+        Serial.println("scannedID=" + lastReadIDSerialNumber);
     }
 
     else if (command.equals("challenge")) {
@@ -155,7 +152,7 @@ void loop()
     }
 
     else if (command.equals("newpass")) {
-        Serial.println(newPINInput());
+        newPINInput();
     }
 
     // Prints '100' when received command is not recognized
@@ -270,7 +267,6 @@ void scan()
 }
 
 // Challenges customer to match a given PIN number
-// TODO Make an accessible variable for easy changing allowed number of attempts
 void challenge()
 {
     // Wait for 6-digit PIN to arrive in Serial. Make sure that on the Java program will only send a 6-character long string of purely numbers
@@ -283,7 +279,7 @@ void challenge()
     String input = ""; // Temporarily stores the input from the customer
     boolean passcodeMatch = false;
 
-    for (int x = 3; x > 0; x--)
+    for (int x = challengeAttempts; x > 0; x--)
     {
         lcd.clear();
         lcd.setCursor(2, 0);
@@ -291,7 +287,6 @@ void challenge()
         lcd.setCursor(8, 0);
 
         // While the entered PIN length is not complete, wait for more inputs
-        // FIXME make keypad do live inputs to the Java Program? Not sure about how to go with this yet
         // TODO Make an 'OK' and 'BACKSPACE' button
         while (input.length() != 6)
         {
@@ -334,14 +329,14 @@ void challenge()
     // if passcode matches, prints "ok" to Serial
     // else, prints "no" to Serial
     // the java program should be listening for these values after sending the correct passcode
-    // TODO Fix the Java code to be triggered by the DATA_RECEIVED event
+    Serial.print("challenge=");
     if (passcodeMatch)
     {
-        Serial.println("ok");
+        Serial.println(1);
     }
     else
     {
-        Serial.println("no");
+        Serial.println(0);
     }
     
 }
@@ -359,7 +354,7 @@ String keypadInput() {
 }
 
 // Asks customer to input a new PIN twice, for confirmation
-String newPINInput() {
+void newPINInput() {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Enter PIN:");
@@ -461,7 +456,7 @@ String newPINInput() {
         }
     }
 
-    return input1;
+    Serial.println("newPIN=" + input1);
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time

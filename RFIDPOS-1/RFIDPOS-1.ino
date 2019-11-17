@@ -67,6 +67,7 @@ MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RF
 const int buzzer = A3;
 const int challengeAttempts = 3;
 String lastReadIDSerialNumber = "";
+boolean connectedToJava = false;
 
 void setup()
 {
@@ -82,84 +83,107 @@ void setup()
     // Initialize RFID Module
     nfc.begin();
     version = nfc.getFirmwareVersion();
+
+    Serial.println(99);
 }
 
 void loop()
 {
-    splash(); // Show splash screen when device is idle
-    String command = waitForSerialInput(); // Listening for commands sent over Serial monitor
-    // valid commands will result in a '1' being sent to Serial. Otherwise, a '100' is sent
-
-    // 'check' commands for testing specific components and connectivity for easier troubleshooting
-    // Valid Commands: 'check nfc', 'check gsm'
-    // returns 100 if command is invalid
-    if (command.equals("check")) {
-        Serial.println(1);
-        command = waitForSerialInput();
-
-        // testing RFID Module
-        // returns '1' if OK
-        // returns '2' if not
-        if (command.equals("nfc")) {
-            if (checkNFC()) {
-                Serial.println(1);
-            }
-            else {
-                Serial.println(0);
-            }
+    // if not connected to POS Software
+    if (!connectedToJava) {
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("Waiting for");
+        lcd.setCursor(0,1);
+        lcd.print("connection...");
+        String startSignal = waitForSerialInput();
+        if  (startSignal.equals("start")) {
+            connectedToJava = true;
+            lcd.clear();
+            lcd.setCursor(3,0);
+            lcd.print("Connection");
+            lcd.setCursor(2,1);
+            lcd.print("Established!");
+            buzzerSuccess();
+            delay(1500);
+            Serial.println(1);
         }
-        // testing GSM Module
-        else if (command.equals("gsm")) {
+    }
+    else {
+        splash(); // Show splash screen when device is idle
+        String command = waitForSerialInput(); // Listening for commands sent over Serial monitor
+        // valid commands will result in a '1' being sent to Serial. Otherwise, a '100' is sent
+
+        // 'check' commands for testing specific components and connectivity for easier troubleshooting
+        // Valid Commands: 'check nfc', 'check gsm'
+        // returns 100 if command is invalid
+        if (command.equals("check")) {
             Serial.println(1);
             command = waitForSerialInput();
 
-            // testing GSM Module
+            // testing RFID Module
             // returns '1' if OK
             // returns '2' if not
-            if (command.equals("status")) {
-                if (checkGSM()) {
+            if (command.equals("nfc")) {
+                if (checkNFC()) {
                     Serial.println(1);
                 }
                 else {
                     Serial.println(0);
                 }
             }
+            // testing GSM Module
+            else if (command.equals("gsm")) {
+                Serial.println(1);
+                command = waitForSerialInput();
 
-            // testing GSM Module signal
-            // prints integer value to Serial
-            else if (command.equals("signal")) {
-                Serial.println(getGSMSignal());
+                // testing GSM Module
+                // returns '1' if OK
+                // returns '2' if not
+                if (command.equals("status")) {
+                    if (checkGSM()) {
+                        Serial.println(1);
+                    }
+                    else {
+                        Serial.println(0);
+                    }
+                }
+
+                // testing GSM Module signal
+                // prints integer value to Serial
+                else if (command.equals("signal")) {
+                    Serial.println(getGSMSignal());
+                }
+            }
+            else {
+                Serial.println(100);
             }
         }
+
+        // Scan RFID Card and send its Serial number
+        else if (command.equals("scan")) {
+            scan();
+            Serial.println(lastReadIDSerialNumber);
+        }
+
+        else if (command.equals("challenge")) {
+            challenge();
+        }
+
+        // GSM commands for sending SMS
+        else if (command.equals("gsm")) {
+            sendSMS();
+        }
+
+        else if (command.equals("newpass")) {
+            newPINInput();
+        }
+
+        // Prints '100' when received command is not recognized
         else {
             Serial.println(100);
         }
     }
-
-    // Scan RFID Card and send its Serial number
-    else if (command.equals("scan")) {
-        scan();
-        Serial.println(lastReadIDSerialNumber);
-    }
-
-    else if (command.equals("challenge")) {
-        challenge();
-    }
-
-    // GSM commands for sending SMS
-    else if (command.equals("gsm")) {
-        sendSMS();
-    }
-
-    else if (command.equals("newpass")) {
-        newPINInput();
-    }
-
-    // Prints '100' when received command is not recognized
-    else {
-        Serial.println(100);
-    }
-    
 }
 
 // Waits for any data to arrive via serial and returns it as a String

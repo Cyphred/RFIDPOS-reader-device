@@ -30,3 +30,4 @@ Functions:
 1. Input functionality - OK
 2. Ask for PIN input (for creating new accounts) - OK
 3. Challenge customer for PIN - OK
+4. Similar behavior of input between `challenge()` and `newPass()`

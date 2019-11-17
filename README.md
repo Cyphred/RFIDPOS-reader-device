@@ -1,7 +1,7 @@
 # RFIDPOS-reader-device
 RFID Card Reader device to complement POS Implementation in Java
 
-Parts List:
+## I. Parts List
 1. Arduino Uno
 2. RFID RC522 Reader
 3. LCM1602 IIC
@@ -10,24 +10,24 @@ Parts List:
 6. Keypad
 7. Buzzer
 
-Functions:
-[GENERAL]
+## II. Functions
+##### A. GENERAL
 1. Cancel an operation
 
-[RFID]
-1. Test for RFID Scanner Status - OK
-2. Read RFID Cards and send the unique identifier over Serial - OK
-3. Read RFID Cards and wait for a 6-digit PIN for verification - [Updated, see #4]
-4. Challenge user for correct PIN/Paasscode - OK
-5. Make the device hold the scanned serial number until the Java program has requested it - OK
+##### B. RFID
+- [x] Test for RFID Scanner Status
+- [x] Read RFID Cards and send the unique identifier over Serial
+- [x] ~~Read RFID Cards and wait for a 6-digit PIN for verification~~
+- [x] Challenge user for correct PIN/Paasscode
+- [x] Make the device hold the scanned serial number until the Java program has requested it
 
-[GSM]
-1. Test for GSM Module Status
-2. Ask for GSM Signal Strength
-3. Send SMS
+##### C. GSM
+- [ ] Test for GSM Module Status
+- [ ] Ask for GSM Signal Strength
+- [ ] Send SMS
 
-[Keypad]
-1. Input functionality - OK
-2. Ask for PIN input (for creating new accounts) - OK
-3. Challenge customer for PIN - OK
-4. Similar behavior of input between `challenge()` and `newPass()`
+##### D. KEYPAD
+- [x] Input functionality
+- [x] Ask for PIN input (for creating new accounts)
+- [x] Challenge customer for PIN
+- [ ] Similar behavior of input between `challenge()` and `newPass()`

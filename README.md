@@ -30,4 +30,4 @@ RFID Card Reader device to complement POS Implementation in Java
 - [x] Input functionality
 - [x] Ask for PIN input (for creating new accounts)
 - [x] Challenge customer for PIN
-- [ ] Similar behavior of input between `challenge()` and `newPass()`
+- [x] Similar behavior of input between `challenge()` and `newPass()`

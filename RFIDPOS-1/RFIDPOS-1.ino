@@ -190,7 +190,7 @@ void loop()
             Serial.println(lastSentData);
         }
 
-        // Prints '100' when received command is not recognized
+        // Prints '9' when received command is not recognized
         else {
             Serial.println(9); // Note: DO NOT use send() for sending error code 9
         }
@@ -280,6 +280,7 @@ void scan()
                 // and converts it into a hex value, then stores it as a string
                 for (int i = 0; i < 4; i++)
                 {
+                    // FIXME returning incorrect card IDs
                     // if the decimal value is lesser than 16, it is going to start with a zero
                     // Casting into a String does not retain that zero, so it must be added manually
                     if (TagSerialNumber[i] < 16) {
@@ -309,39 +310,63 @@ void challenge()
     while (passcode.length() != 6)
     {
         passcode = Serial.readStringUntil('\n');
+        if (passcode.length() != 6) {
+            Serial.println(9);
+        }
     }
 
     String input = ""; // Temporarily stores the input from the customer
-    boolean passcodeMatch = false;
+    boolean done = false;
 
+    // loop for a maximum of the specified times in challengeAttempts
     for (int x = challengeAttempts; x > 0; x--)
     {
         lcd.clear();
         lcd.setCursor(2, 0);
         lcd.print("PIN :");
         lcd.setCursor(8, 0);
-
+        
         // While the entered PIN length is not complete, wait for more inputs
-        // TODO Make an 'OK' and 'BACKSPACE' button
-        while (input.length() != 6)
+        while (input.length() != 6 || !done)
         {
-            String tempInput = keypadInput();
+            String tempInput = keypadInput(); // waits until the keypad is pressed and returns a character
+
+            // if the pressed button is not the "OK" or "Backspace" button, add returned charater to the current input and display an asterisk on the LCD
             if (!tempInput.equals("*") && !tempInput.equals("#")) {
                 input += tempInput;
                 lcd.print("*");
+            }
+
+            // if "Backspace" button is pressed, remove the last character from the current input
+            else if (tempInput.equals("#") && tempInput.length() >= 1) {
+                char inputCharArray[6];
+                input.toCharArray(inputCharArray, input.length());
+                input = String(inputCharArray);
+
+                lcd.setCursor(8,0);
+                lcd.print("      ");
+                lcd.setCursor(8,0);
+                for (int x = 0; x < input.length(); x++) {
+                    lcd.print("*");
+                }
+            }
+
+            // if "ok" button is pressed and PIN length is satisfied, proceed to checking it the entered PIN matches the one retrieved from the database
+            else if (tempInput.equals("*") && input.length() == 6) {
+                done = true;
             }
         }
 
         // if entered PIN matches the PIN retrieved from the database
         if (passcode.equals(input))
         {
-            passcodeMatch = true;
             lcd.clear();
             lcd.setCursor(2, 0);
             lcd.print("Verification");
             lcd.setCursor(3, 1);
             lcd.print("Successful");
             delay(2000);
+            send(1);
             break;
         }
 
@@ -358,17 +383,14 @@ void challenge()
             buzzerError();
             delay(1250);
             input = "";
+            done = false;
         }
     }
 
     // if passcode matches, prints "1" to Serial
     // else, prints "0" to Serial
     // the java program should be listening for these values after sending the correct passcode
-    if (passcodeMatch)
-    {
-        send(1);
-    }
-    else
+    if (!passcode.equals(input))
     {
         send(0);
     }
@@ -389,14 +411,14 @@ String keypadInput() {
 
 // Asks customer to input a new PIN twice, for confirmation
 void newPINInput() {
+    String input1 = ""; // first input
+    String input2 = ""; // second input, for verification purposes
+    boolean done = false;
+
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Enter PIN:");
     lcd.setCursor(10,0);
-
-    String input1 = ""; // first input
-    String input2 = ""; // second input, for verification purposes
-    boolean done = false;
 
     // keep looping until input length is 6 characters, and the "OK" button is pressed
     while (input1.length() != 6 || !done)

@@ -167,6 +167,11 @@ void loop()
             }
         }
 
+        // Respond to Java inquiry for connection status
+        else if (command.equals("test")) {
+            Serial.println(1);
+        }
+
         // Scan RFID Card and send its Serial number
         else if (command.equals("scan")) {
             scan();

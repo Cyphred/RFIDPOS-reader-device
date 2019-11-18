@@ -324,6 +324,10 @@ void challenge()
         lcd.clear();
         lcd.setCursor(2, 0);
         lcd.print("PIN :");
+        lcd.setCursor(0, 1);
+        lcd.print("[*]OK");
+        lcd.setCursor(9, 1);
+        lcd.print("[#]BACK");
         lcd.setCursor(8, 0);
         
         // While the entered PIN length is not complete, wait for more inputs
@@ -418,6 +422,10 @@ void newPINInput() {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Enter PIN:");
+    lcd.setCursor(0, 1);
+    lcd.print("[*]OK");
+    lcd.setCursor(9, 1);
+    lcd.print("[#]BACK");
     lcd.setCursor(10,0);
 
     // keep looping until input length is 6 characters, and the "OK" button is pressed
@@ -533,8 +541,6 @@ void buzzerSuccess() {
     delay(500);
     noTone(buzzer);
 }
-
-int timesSent = 0;
 
 // saves data before sending it to the Serial monitor in case it is requsted again
 void send(String data) {

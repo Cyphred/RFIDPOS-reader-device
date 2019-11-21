@@ -259,7 +259,7 @@ void scan()
     byte TagData[MAX_LEN];                                  // full tag data
     byte TagSerialNumber[5];                                // tag serial number
 
-    // Prompts customer to scan their RFID card
+    // Prompts user to scan their RFID card
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Place your card");
@@ -315,108 +315,155 @@ void scan()
 // This process takes longer than a normal scan as it does multiple passes to ensure that the correct card information is read
 // It will make mutiple scans and compare them to increase accuracy
 void newCardScan() {
+    boolean validIDAvailable = false;
     byte FoundTag;                                          // value to tell if a tag is found
     byte ReadTag;                                           // Anti-collision value to read tag information
     byte TagData[MAX_LEN];                                  // full tag data
     byte TagSerialNumber[5];                                // tag serial number
 
-    // Prompts customer to scan their RFID card
-    lcd.clear();
-    lcd.setCursor(1,0);
-    lcd.print("Scan Progress:");
-    lcd.setCursor(0,1);
-
     String scannedIDs[16]; // will store 16 sets of 4 bytes each, representing the scanned card's UID
-    int storedBytes = 0; // counts the number of bytes stored in the array
+    int storedBytes = -1; // counts the number of bytes stored in the array
 
-    // keep looping until the card has been scanned 16 times
-    while (storedBytes != 16) {
-        // Check if a tag was detected
-        // If yes, then variable FoundTag will contain "MI_OK"
-        FoundTag = nfc.requestTag(MF1_REQIDL, TagData);
+    while (!validIDAvailable) {
+        // keep looping until the card has been scanned 16 times
+        while (storedBytes != 16) {
+            if (storedBytes == -1) {
+                // Prompts user to scan their RFID card
+                lcd.clear();
+                lcd.setCursor(0,0);
+                lcd.print("Hold your card");
+                lcd.setCursor(0,1);
+                lcd.print("near the scanner");
+                storedBytes = 0;
+            }
 
-        if (FoundTag == MI_OK) {
-            delay(200);
-            ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
-            memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
+            // Check if a tag was detected
+            // If yes, then variable FoundTag will contain "MI_OK"
+            FoundTag = nfc.requestTag(MF1_REQIDL, TagData);
 
-            // if tag data does not start with 0 and 32
-            // I've noticed incompletely-read tag data tends to start with 0 and 32 as the firt 2 bytes
-            if (!(TagSerialNumber[0] == 0 && TagSerialNumber[1] == 32)) {
-                String stringSerialNumber = "";
-                // iterates 4 times to get the first 4 decimal values representing the scanned card's unique ID
-                // and converts it into a hex value, then stores it as a string
-                for (int x = 0; x < 4; x++) {
-                    if (TagSerialNumber[x] < 16) {
-                        stringSerialNumber += 0;
-                    }
-                    stringSerialNumber += String(TagSerialNumber[x], HEX);
+            if (FoundTag == MI_OK) {
+                if (storedBytes == 0) {
+                    lcd.clear();
+                    lcd.setCursor(4,0);
+                    lcd.print("Scanning");
+                    lcd.setCursor(0,1);
                 }
 
-                // Stores the new string to the list of 16 scanned IDs and prints to the progress bar
-                scannedIDs[storedBytes] = stringSerialNumber;
-                storedBytes++;
-                lcd.print("*");
+                delay(200);
+                ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
+                memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
+
+                // if tag data does not start with 0 and 32
+                // I've noticed incompletely-read tag data tends to start with 0 and 32 as the firt 2 bytes
+                if (!(TagSerialNumber[0] == 0 && TagSerialNumber[1] == 32)) {
+                    String stringSerialNumber = "";
+                    // iterates 4 times to get the first 4 decimal values representing the scanned card's unique ID
+                    // and converts it into a hex value, then stores it as a string
+                    for (int x = 0; x < 4; x++) {
+                        if (TagSerialNumber[x] < 16) {
+                            stringSerialNumber += 0;
+                        }
+                        stringSerialNumber += String(TagSerialNumber[x], HEX);
+                    }
+
+                    // Stores the new string to the list of 16 scanned IDs and prints to the progress bar
+                    scannedIDs[storedBytes] = stringSerialNumber;
+                    storedBytes++;
+                    lcd.print(char(255));
+                }
             }
         }
-    }
 
-    String uniqueIDs[16]; // keeps track of all unique IDs scanned
-    int storedUniqueIDs = 0; // keeps track the actual number unique IDs scanned
+        String uniqueIDs[16]; // keeps track of all unique IDs scanned
+        int storedUniqueIDs = 0; // keeps track the actual number unique IDs scanned
 
-    // for each scanned ID...
-    for (String sid: scannedIDs) {
-        boolean duplicateFound = false;
-        // checks if it matches an already recognized unique ID
-        for (String s: uniqueIDs) {
-            if (sid.equals(s)) {
-                duplicateFound = true;
-                break;
-            }
-        }
-        // if no duplicate is found, add to list of unique IDs and increment Unique ID counter
-        if (!duplicateFound) {
-            uniqueIDs[storedUniqueIDs] = sid;
-            storedUniqueIDs++;
-        }
-    }
-
-    int scores[storedUniqueIDs]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
-    // for each stored unique ID, set the default score of zero
-    for (int x = 0; x < storedUniqueIDs; x++) {
-        scores[x] = 0;
-    }
-
-    // for each stored unique ID...
-    for (int x = 0; x < storedUniqueIDs; x++) {
-        // compare it with each unique ID and increment the score for the corresponding ID
+        // for each scanned ID...
         for (String sid: scannedIDs) {
-            if (uniqueIDs[x].equals(sid)) {
-                scores[x]++;
+            boolean duplicateFound = false;
+            // checks if it matches an already recognized unique ID
+            for (String s: uniqueIDs) {
+                if (sid.equals(s)) {
+                    duplicateFound = true;
+                    break;
+                }
+            }
+            // if no duplicate is found, add to list of unique IDs and increment Unique ID counter
+            if (!duplicateFound) {
+                uniqueIDs[storedUniqueIDs] = sid;
+                storedUniqueIDs++;
             }
         }
-    }
 
-    int highestScore = 0; // keeps track of the highest score
-    String bestMatch; // stores the actual ID with the highest score
-    for (int x = 0; x < storedUniqueIDs; x++) {
-        if (scores[x] > highestScore) {
-            highestScore = scores[x];
-            bestMatch = uniqueIDs[x];
+        int scores[storedUniqueIDs]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
+        // for each stored unique ID, set the default score of zero
+        for (int x = 0; x < storedUniqueIDs; x++) {
+            scores[x] = 0;
+        }
+
+        // for each stored unique ID...
+        for (int x = 0; x < storedUniqueIDs; x++) {
+            // compare it with each unique ID and increment the score for the corresponding ID
+            for (String sid: scannedIDs) {
+                if (uniqueIDs[x].equals(sid)) {
+                    scores[x]++;
+                }
+            }
+        }
+
+        // checks for ties in scoring
+        boolean tieFound = false;
+        for (int x = 0; x < storedUniqueIDs; x++) {
+            for (int y = 0; y < storedUniqueIDs; y++) {
+                if (x != y) {
+                    if (scores[x] == scores[y] && (scores[x] + scores[y]) != 0) {
+                        tieFound = true;
+                        break; // breaks inner loop
+                    }
+                }
+            }
+
+            if (tieFound) {
+                break; // breaks outer loop
+            }
+        }
+
+        // if there are no ties found, start looking for the highest-scoring ID
+        if (!tieFound) {
+            int highestScore = 0; // keeps track of the highest score
+            String bestMatch; // stores the actual ID with the highest score
+            for (int x = 0; x < storedUniqueIDs; x++) {
+                if (scores[x] > highestScore) {
+                    highestScore = scores[x];
+                    bestMatch = uniqueIDs[x];
+                }
+            }
+
+            lcd.clear();
+            lcd.setCursor(1,0);
+            lcd.print("Scan Complete!");
+            buzzerSuccess();
+            delay(1500);
+
+            bestMatch.toUpperCase();
+            send(bestMatch);
+            validIDAvailable = true;
+        }
+        // if there are ties found, retry the scan
+        else {
+            lcd.clear();
+            lcd.setCursor(2,0);
+            lcd.print("Scan Failed!");
+            lcd.setCursor(0,1);
+            lcd.print("Please try again");
+            buzzerError();
+            delay(1250);
+            storedBytes = -1;
+            storedUniqueIDs = 0;
         }
     }
-
-    lcd.clear();
-    lcd.setCursor(1,0);
-    lcd.print("Scan Complete!");
-    buzzerSuccess();
-    delay(1500);
-
-    bestMatch.toUpperCase();
-    send(bestMatch);
 }
 
-// Challenges customer to match a given PIN number
+// Challenges user to match a given PIN number
 void challenge()
 {
     // Wait for 6-digit PIN to arrive in Serial. Make sure that on the Java program will only send a 6-character long string of purely numbers
@@ -429,7 +476,7 @@ void challenge()
         }
     }
 
-    String input = ""; // Temporarily stores the input from the customer
+    String input = ""; // Temporarily stores the input from the user
     boolean done = false;
 
     // loop for a maximum of the specified times in challengeAttempts
@@ -549,7 +596,7 @@ String keypadInput() {
     return returnValue;
 }
 
-// Asks customer to input a new PIN twice, for confirmation
+// Asks user to input a new PIN twice, for confirmation
 void newPINInput() {
     String inputs[2] = {"",""};
     boolean redo = false;

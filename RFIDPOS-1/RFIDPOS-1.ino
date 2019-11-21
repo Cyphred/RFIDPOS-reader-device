@@ -411,13 +411,11 @@ void newCardScan() {
         }
 
         // checks for ties in scoring
-        // FIXME Really? Change this to test for unique ID's instead of all the storedBytes. Jeez. Go get some sleep.
         boolean tieFound = false;
-        for (int x = 0; x < storedBytes; x++) {
-            for (int y = 0; y < storedBytes; y++) {
+        for (int x = 0; x < storedUniqueIDs; x++) {
+            for (int y = 0; y < storedUniqueIDs; y++) {
                 if (x != y) {
                     if (scores[x] == scores[y] && (scores[x] + scores[y]) != 0) {
-                        Serial.print("Tie found between " + String(x) + " and " + String(y));
                         tieFound = true;
                         break; // breaks inner loop
                     }
@@ -460,6 +458,7 @@ void newCardScan() {
             buzzerError();
             delay(1250);
             storedBytes = -1;
+            storedUniqueIDs = 0;
         }
     }
 }

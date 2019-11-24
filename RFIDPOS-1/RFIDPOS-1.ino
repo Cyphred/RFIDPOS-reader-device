@@ -349,7 +349,7 @@ void newCardScan() {
                     lcd.setCursor(0,1);
                 }
 
-                delay(200);
+                delay(100);
                 ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
                 memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
 

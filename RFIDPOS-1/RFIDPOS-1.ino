@@ -183,7 +183,7 @@ void loop()
         }
 
         else if (command.equals("challenge")) {
-            challenge();
+            challenge(waitForSerialInput());
         }
 
         // GSM commands for sending SMS
@@ -463,125 +463,110 @@ void newCardScan() {
     }
 }
 
-// Challenges user to match a given PIN number
-void challenge()
-{
-    // Wait for 6-digit PIN to arrive in Serial. Make sure that on the Java program will only send a 6-character long string of purely numbers
-    String passcode = "";
-    while (passcode.length() != 6)
-    {
-        passcode = Serial.readStringUntil('\n');
-        if (passcode.length() != 6) {
-            Serial.println(9);
-        }
+
+// TODO Document this method
+void challenge(String passcodeString) {
+    char passcode[6];
+    for (int x = 0; x < 6; x++) {
+        passcode[x] = passcodeString.charAt(x);
     }
 
-    String input = ""; // Temporarily stores the input from the user
-    boolean done = false;
+    boolean result = false;
 
-    // loop for a maximum of the specified times in challengeAttempts
-    for (int x = challengeAttempts; x > 0; x--)
-    {
+    for (int x = challengeAttempts; x > 0; x--) {
+        char input[6];
+        int storedInputs = 0;
+        unsigned long lastKeyPress;
+        boolean timedOut = false;
+
         lcd.clear();
         lcd.setCursor(2, 0);
         lcd.print("PIN :");
-        lcd.setCursor(0, 1);
-        lcd.print("[*]OK");
-        lcd.setCursor(9, 1);
-        lcd.print("[#]BACK");
+        lcd.setCursor(3, 1);
+        lcd.print("[#]DELETE");
         lcd.setCursor(8, 0);
-        
-        // While the entered PIN length is not complete, wait for more inputs
-        while (input.length() != 6 || !done)
-        {
-            String tempInput = keypadInput(); // waits until the keypad is pressed and returns a character
 
-            // if the pressed button is not the "OK" or "Backspace" button, add returned charater to the current input and display an asterisk on the LCD
-            if (!tempInput.equals("*") && !tempInput.equals("#")) {
-                // if input is not 6 characters long, keep adding to input
-                // otherwise, play short error tone
-                if (input.length() < 6) {
-                    input += tempInput;
-                    lcd.print("*");
-                }
-                else {
-                    buzzerQuickError();
-                }
-            }
-
-            // if "Backspace" button is pressed, remove the last character from the current input
-            else if (tempInput.equals("#")) {
-                // if input is not 0 characters long, keep deleting the last input
-                // otherwise, play short error tone
-                if (input.length() >= 1) {
-                    char inputCharArray[6];
-                    input.toCharArray(inputCharArray, input.length());
-                    input = String(inputCharArray);
-
-                    lcd.setCursor(8,0);
-                    lcd.print("      ");
-                    lcd.setCursor(8,0);
-                    for (int x = 0; x < input.length(); x++) {
-                        lcd.print("*");
+        while (!timedOut) {
+            char key = keypad.getKey(); // Get key from keypad
+            // if a key is pressed
+            if (key) {
+                if (key == '#') {
+                    if (storedInputs > 0) {
+                        storedInputs--;
+                        lcd.setCursor(8, 0);
+                        lcd.print("      ");
+                        lcd.setCursor(8, 0);
+                        for (int y = 0; y < storedInputs; y++) {
+                            lcd.print("*");
+                        }
+                    }
+                    else {
+                        buzzerQuickError();
                     }
                 }
-                else {
+                else if (key == '*') {
                     buzzerQuickError();
+                }
+                // if a number is pressed
+                else {
+                    lastKeyPress = millis();
+                    // if the number of stored inputs is not 6 yet
+                    if (storedInputs != 6) {
+                        input[storedInputs] = key;
+                        storedInputs++;
+                        lcd.print("*");
+                    }
+                    else {
+                        buzzerQuickError();
+                    }
                 }
             }
 
-            // if "ok" button is pressed, check if PIN length is satisfied.
-            // Proceed to checking if length is good.
-            // Otherwise, play short error tone
-            else if (tempInput.equals("*")) {
-                if (input.length() == 6) {
-                    done = true;
-                }
-                else {
-                    buzzerQuickError();
-                }
-                
+            // if there are 6 digits in input and 2 seconds have passed since the last keypress
+            if (storedInputs == 6 && (millis() - lastKeyPress) == 2000) {
+                timedOut = true;
+            }
+        }
+        
+        boolean match = true;
+        for (int y = 0; y < 6; y++) {
+            if (input[y] != passcode[y]) {
+                match = false;
+                break;
             }
         }
 
-        // if entered PIN matches the PIN retrieved from the database
-        if (passcode.equals(input))
-        {
+        if (match) {
             lcd.clear();
-            lcd.setCursor(2, 0);
+            lcd.setCursor(2,0);
             lcd.print("Verification");
-            lcd.setCursor(3, 1);
+            lcd.setCursor(3,1);
             lcd.print("Successful");
-            delay(2000);
-            send(1);
+            buzzerSuccess();
+            delay(1500);
+
+            result = true;
             break;
         }
-
-        // if entered PIN DOES NOT match the PIN retrieved from the database
-        else
-        {
+        else {
             lcd.clear();
-            lcd.setCursor(1, 0);
-            lcd.print("Incorrect PIN.");
-            lcd.setCursor(1, 1);
-            lcd.print(x - 1);
-            lcd.setCursor(3, 1);
+            lcd.setCursor(2,0);
+            lcd.print("Invalid PIN");
+            lcd.setCursor(1,1);
+            lcd.print(x-1);
+            lcd.setCursor(3,1);
             lcd.print("retries left");
             buzzerError();
             delay(1250);
-            input = "";
-            done = false;
         }
     }
 
-    // if passcode matches, prints "1" to Serial
-    // else, prints "0" to Serial
-    // the java program should be listening for these values after sending the correct passcode
-    if (!passcode.equals(input))
-    {
+    if (result) {
+        send(1);
+    }
+    else {
         send(0);
     }
-    
 }
 
 // Waits for a key on the keypad to be pressed before returning the pressed number

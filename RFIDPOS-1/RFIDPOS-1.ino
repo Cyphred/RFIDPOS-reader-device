@@ -67,7 +67,8 @@ MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RF
 const int buzzer = A3;
 const int challengeAttempts = 3;
 String lastSentData = "";
-boolean connectedToJava = false;
+boolean deviceConnected = false;
+boolean startingState = true;
 
 void setup()
 {
@@ -83,127 +84,75 @@ void setup()
     // Initialize RFID Module
     nfc.begin();
     version = nfc.getFirmwareVersion();
-
-    send(1);
 }
 
-int timesAsked = 0;
+int lastPrinted = 0; // An identifier for different LCD messages to prevent screen flickering
+/*
+    ID list
+    1 - Waiting for connection
+    2 - Connection Established
+    3 - Disconnected
+    4 - Splash screen
+*/
 
-void loop()
-{
-    // if not connected to POS Software
-    if (!connectedToJava) {
-        lcd.clear();
-        lcd.setCursor(0,0);
-        lcd.print("Waiting for");
-        lcd.setCursor(0,1);
-        lcd.print("connection...");
-        String startSignal = waitForSerialInput();
-        if  (startSignal.equals("start")) {
-            connectedToJava = true;
+void loop() {
+    // if device is connected
+    if (deviceConnected) {
+        // Print the splash screen
+        if (lastPrinted != 4) {
             lcd.clear();
-            lcd.setCursor(3,0);
-            lcd.print("Connection");
-            lcd.setCursor(2,1);
-            lcd.print("Established!");
-            buzzerSuccess();
-            delay(1500);
-            send(2);
-        }
-        else if (startSignal.equals("sendAgain")) {
-            Serial.println(lastSentData);
+            lcd.setCursor(0,0);
+            lcd.print("RFID POS SCANNER");
+            lcd.setCursor(6,1);
+            lcd.print("v1.0");
+            lastPrinted = 4;
         }
     }
 
-    // if connected to POS Software
+    // if device is not connected
     else {
-        splash(); // Show splash screen when device is idle
-
-        // Listening for commands sent over Serial monitor
-        // invalid commands will result in a '9' being sent to Serial
-        String command = waitForSerialInput();
-
-        // 'check' commands for testing specific components and connectivity for easier troubleshooting
-        // Valid Commands: 'check nfc', 'check gsm'
-        // returns 100 if command is invalid
-        if (command.equals("check")) {
-            command = waitForSerialInput();
-
-            // testing RFID Module
-            // returns '1' if OK
-            // returns '2' if not
-            if (command.equals("nfc")) {
-                if (checkNFC()) {
-                    send(1);
-                }
-                else {
-                    send(0);
-                }
-            }
-            // testing GSM Module
-            else if (command.equals("gsm")) {
-                command = waitForSerialInput();
-
-                // testing GSM Module
-                // returns '1' if OK
-                // returns '2' if not
-                if (command.equals("status")) {
-                    if (checkGSM()) {
-                        send(1);
-                    }
-                    else {
-                        send(0);
-                    }
+        while (!deviceConnected) {
+            // if a connection hasn't been made prior
+            if (startingState) {
+                if (lastPrinted != 1) {
+                    lcd.clear();
+                    lcd.setCursor(0,0);
+                    lcd.print("Waiting for");
+                    lcd.setCursor(0,1);
+                    lcd.print("connection...");
+                    lastPrinted = 1;
                 }
 
-                // testing GSM Module signal
-                // prints integer value to Serial
-                else if (command.equals("signal")) {
-                    send(getGSMSignal());
+                byte readByte = Serial.read(); // read arriving bytes in Serial
+                // if character '1' is received, set status as connected
+                if (readByte == 49) {
+                    lcd.clear();
+                    lcd.setCursor(3,0);
+                    lcd.print("Connection");
+                    lcd.setCursor(2,1);
+                    lcd.print("Established!");
+                    buzzerSuccess();
+                    delay(1500);
+                    lastPrinted = 2;
+                    startingState = false;
+                    deviceConnected = true;
                 }
             }
+            // if a connection has been made prior
             else {
-                send(100);
+                if (lastPrinted != 3) {
+                    lcd.clear();
+                    lcd.setCursor(5,0);
+                    lcd.print("Device");
+                    lcd.setCursor(2,1);
+                    lcd.print("Disconnected");
+                    buzzerError();
+                    delay(1250);
+                    lastPrinted = 3;
+                }
             }
         }
-
-        // Respond to Java inquiry for connection status
-        else if (command.equals("test")) {
-            Serial.println(1);
-        }
-
-        // Scan RFID Card and send its Serial number
-        else if (command.equals("scan")) {
-            scan();
-        }
-
-        // Use this for scanning new cards into the database for higher read accuracy
-        else if (command.equals("newscan")) {
-            newCardScan();
-        }
-
-        else if (command.equals("challenge")) {
-            challenge(waitForSerialInput());
-        }
-
-        // GSM commands for sending SMS
-        else if (command.equals("gsm")) {
-            sendSMS();
-        }
-
-        else if (command.equals("newpass")) {
-            newPINInput();
-        }
-
-        // Prints the last scanned ID to serial monitor for future retrieval in case Java program does not receive complete data
-        else if (command.equals("sendAgain")) {
-            Serial.println(lastSentData);
-        }
-
-        // Prints '9' when received command is not recognized
-        else {
-            Serial.println(9); // Note: DO NOT use send() for sending error code 9
-        }
+        
     }
 }
 
@@ -214,15 +163,6 @@ String waitForSerialInput() {
         input = Serial.readStringUntil('\n');
     }
     return input;
-}
-
-// Prints splash screen to LCD
-void splash() {
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print("RFID POS SCANNER");
-    lcd.setCursor(6,1);
-    lcd.print("v1.0");
 }
 
 // Checks if the RFID Module if connected

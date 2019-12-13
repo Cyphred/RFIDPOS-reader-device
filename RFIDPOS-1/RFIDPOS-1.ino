@@ -67,8 +67,9 @@ MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RF
 const int buzzer = A3;
 const int challengeAttempts = 3;
 String lastSentData = "";
+byte lastSentByte;
 boolean deviceConnected = false;
-boolean startingState = true;
+boolean startingState = true; // Is set to false once a connection is established with the POS System
 
 void setup()
 {
@@ -84,6 +85,10 @@ void setup()
     // Initialize RFID Module
     nfc.begin();
     version = nfc.getFirmwareVersion();
+    
+    sendByte(180); // Signals the POS that the device is ready to initiate a connection
+
+    // TODO Edit interface to send a '1' upon Initialization
 }
 
 int lastPrinted = 0; // An identifier for different LCD messages to prevent screen flickering
@@ -93,13 +98,20 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     2 - Connection Established
     3 - Disconnected
     4 - Splash screen
+    5 - Place your card near the scanner
+    6 - Card Scanned
 */
 
+int operationState = 0; // keeps track of what operation is currently being performed
+byte lastReadByte;
+
 void loop() {
+    lastReadByte = Serial.read();
+
     // if device is connected
     if (deviceConnected) {
         // Print the splash screen
-        if (lastPrinted != 4) {
+        if (lastPrinted != 4 && operationState == 0) {
             lcd.clear();
             lcd.setCursor(0,0);
             lcd.print("RFID POS SCANNER");
@@ -107,52 +119,62 @@ void loop() {
             lcd.print("v1.0");
             lastPrinted = 4;
         }
+
+        updateOperationState();
+        
+        switch (operationState) {
+        case 1:
+            scan();
+            break;
+        
+        default:
+            break;
+        }
     }
 
     // if device is not connected
     else {
-        while (!deviceConnected) {
-            // if a connection hasn't been made prior
-            if (startingState) {
-                if (lastPrinted != 1) {
-                    lcd.clear();
-                    lcd.setCursor(0,0);
-                    lcd.print("Waiting for");
-                    lcd.setCursor(0,1);
-                    lcd.print("connection...");
-                    lastPrinted = 1;
-                }
-
-                byte readByte = Serial.read(); // read arriving bytes in Serial
-                // if character '1' is received, set status as connected
-                if (readByte == 49) {
-                    lcd.clear();
-                    lcd.setCursor(3,0);
-                    lcd.print("Connection");
-                    lcd.setCursor(2,1);
-                    lcd.print("Established!");
-                    buzzerSuccess();
-                    delay(1500);
-                    lastPrinted = 2;
-                    startingState = false;
-                    deviceConnected = true;
-                }
-            }
-            // if a connection has been made prior
-            else {
-                if (lastPrinted != 3) {
-                    lcd.clear();
-                    lcd.setCursor(5,0);
-                    lcd.print("Device");
-                    lcd.setCursor(2,1);
-                    lcd.print("Disconnected");
-                    buzzerError();
-                    delay(1250);
-                    lastPrinted = 3;
-                }
+        // if device is not connected and a connection hasn't been made prior
+        if (startingState) {
+            if (lastPrinted != 1) {
+                lcd.clear();
+                lcd.setCursor(0,0);
+                lcd.print("Waiting for");
+                lcd.setCursor(0,1);
+                lcd.print("connection...");
+                lastPrinted = 1;
             }
         }
-        
+        // if device is not connected and a connection has been made prior
+        else {
+            if (lastPrinted != 3) {
+                lcd.clear();
+                lcd.setCursor(5,0);
+                lcd.print("Device");
+                lcd.setCursor(2,1);
+                lcd.print("Disconnected");
+                buzzerError();
+                delay(1250);
+                lastPrinted = 3;
+            }
+
+            sendByte(180); // Tells POS to reestablish a connection
+        }
+
+        // if byte 128 is received, set status as connected
+        if (lastReadByte == 128) {
+            lcd.clear();
+            lcd.setCursor(3,0);
+            lcd.print("Connection");
+            lcd.setCursor(2,1);
+            lcd.print("Established!");
+            buzzerSuccess();
+            delay(1500);
+            lastPrinted = 2;
+            startingState = false;
+            deviceConnected = true;
+            sendByte(181);
+        }
     }
 }
 
@@ -190,9 +212,64 @@ void sendSMS() {
     buzzerError();
 }
 
+// Checks if an RFID tag is scanned
+// Returns the unique ID of RFID card as a 4-byte stream
+void scan()
+{
+    byte FoundTag;                                          // value to tell if a tag is found
+    byte ReadTag;                                           // Anti-collision value to read tag information
+    byte TagData[MAX_LEN];                                  // full tag data
+    byte TagSerialNumber[5];                                // tag serial number
+    boolean validTag = false;
+
+    // Prompts user to scan their RFID card
+    if (lastPrinted != 5) {
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("Place your card");
+        lcd.setCursor(0,1);
+        lcd.print("near the scanner");
+        lastPrinted = 5;
+    }
+    
+    // Check if a tag was detected
+    // If yes, then variable FoundTag will contain "MI_OK"
+    FoundTag = nfc.requestTag(MF1_REQIDL, TagData);
+
+    if (FoundTag == MI_OK) {
+        delay(200);
+        ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
+        memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
+
+        // if tag data does not start with 0 and 32
+        // I've noticed incompletely-read tag data tends to start with 0 and 32 as the firt 2 bytes
+        if (!(TagSerialNumber[0] == 0 && TagSerialNumber[1] == 32)) {
+            validTag = true;
+        }
+    }
+
+    // if the scanned bytes are valid
+    if (validTag) {
+        // Notifies user of successful scan through displayed text on the LCD and a beep
+        lcd.clear();
+        lcd.setCursor(2,0);
+        lcd.print("Card Scanned");
+        lastPrinted = 6;
+        buzzerSuccess();
+
+        sendByte(178); // Start a data stream
+        // Send 4 bytes representing the card's unique ID
+        for (int x = 0; x < 4; x++) {
+            sendByte(TagSerialNumber[x]);
+        }
+        sendByte(179); // End the data stream
+        operationState = 0;
+    }
+}
+
 // Waits for an RFID card to be scanned
 // Returns the unique ID of RFID card as 8-character String
-void scan()
+void old_scan()
 {
     byte FoundTag;                                          // value to tell if a tag is found
     byte ReadTag;                                           // Anti-collision value to read tag information
@@ -200,12 +277,14 @@ void scan()
     byte TagSerialNumber[5];                                // tag serial number
 
     // Prompts user to scan their RFID card
-    lcd.clear();
-    lcd.setCursor(0,0);
-    lcd.print("Place your card");
-    lcd.setCursor(0,1);
-    lcd.print("near the scanner");
-
+    if (lastPrinted != 5) {
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("Place your card");
+        lcd.setCursor(0,1);
+        lcd.print("near the scanner");
+    }
+    
     String stringSerialNumber = ""; // String to temporarily store converted tag data
     // repeat until the retrieved serial number is 8 characters long
     while (stringSerialNumber.length() != 8)
@@ -756,4 +835,23 @@ void send(String data) {
 void send(int data) {
     Serial.println(data);
     lastSentData = data;
+}
+
+void sendByte(byte data) {
+    Serial.write(data);
+    lastSentByte = data;
+}
+
+void updateOperationState() {
+    switch (lastReadByte) {
+    case 129:
+        operationState = 0;
+        break;
+    case 190:
+        operationState = 1; // Sets the current task to "scan()"
+        break;
+    
+    default:
+        break;
+    }
 }

@@ -33,11 +33,11 @@
     + -> A3
     - -> GND
 
-  [GSM Module] - https://www.ayomaonline.com/programming/quickstart-sim800-sim800l-with-arduino/
-    VCC -> 5V
-    GND -> GND
-    SIM_TXD -> D8
-    SIM_RXD -> D7
+  [GSM Module] - https://randomnerdtutorials.com/sim900-gsm-gprs-shield-arduino/
+    GND -> Digital GND
+    GND next to Vin -> Digital GND
+    TXD -> D7
+    RXD -> D8
 */
 
 #include <Wire.h>              // Library for I2C communication
@@ -45,6 +45,10 @@
 #include <MFRC522.h>           // RFID Module Library
 #include <SPI.h>               // Library for communication via SPI with the RFID Module
 #include <Keypad.h>            // Library for Keypad support
+#include <SoftwareSerial.h>    // Library for Software Serial communication between the Arduino and the GSM Module
+
+// GSM Module declarations
+SoftwareSerial gsmSerial(7,8);
 
 // RFID Reader declarations
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
@@ -85,10 +89,12 @@ int newScan_storedIDs = 0; // counts the number of bytes stored in the array
 byte newScan_uniqueIDs[16][4];// will store up to 16 sets of 4 bytes each, representing each scanned UID for comparison
 int newScan_storedUniqueIDs = 0; // keeps track the actual number unique IDs scanned
 int newScan_scores[16]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
+unsigned long newScan_lastScanTime = 0;
 
 void setup()
 {
     SPI.begin();
+    gsmSerial.begin(19200);
     Serial.begin(115200);
     pinMode(buzzer, OUTPUT);
 
@@ -228,9 +234,24 @@ int getGSMSignal() {
     return 0;
 }
 
-// TODO Sends an SMS with the GSM Module
-void sendSMS() {
-    buzzerError();
+// Sends an SMS with the GSM Module. Returns true if sending is successful
+boolean sendSMS(String number, String message) {
+    // AT command to set Sim900Serial to SMS mode
+    Sim900Serial.print("AT+CMGF=1\r"); 
+    delay(100);
+    Sim900Serial.println("AT + CMGS = \"" + number + "\""); 
+    delay(100);
+    Sim900Serial.println(message); 
+    delay(100);
+    // End AT command with a ^Z, ASCII code 26
+    Sim900Serial.println((char)26); 
+    delay(100);
+    Sim900Serial.println();
+    // Give module time to send SMS
+    delay(5000); 
+
+    // TODO find out how you can determine if the SMS has sent successfully
+    return false;
 }
 
 // Checks if an RFID tag is scanned
@@ -338,126 +359,39 @@ void newScan() {
                 }
                 Serial.println(""); // TEMP
                 newScan_storedIDs++;
+                newScan_lastScanTime = millis();
                 lcd.print(char(255));
+            }
+        }
+        // if no card is read
+        else {
+            // if scan is incomplete and no new tag is read 5 seconds after the last read,
+            // abort the scan operation
+            if ((millis() - newScan_lastScanTime) > 5000 && newScan_storedIDs > 0) {
+                failedNewScan(0);
             }
         }
     }
 
     // if there are enough stored IDs from RFID Tags
     else {
-        // for each scanned ID...
-        for (int x = 0; x < 16; x++) {
-            boolean duplicateFound = false;
-
-            Serial.print("Match test : "); // TEMP
-            // checks if it matches an already recognized unique ID
-            for (int y = 0; y < newScan_storedUniqueIDs; y++) {
-                int matches = 0;
-                for (int z = 0; z < 4; z++) {
-                    Serial.print(String(newScan_scannedIDs[x][z],HEX)); // TEMP
-                    if (newScan_scannedIDs[x][z] == newScan_uniqueIDs[y][z]) {
-                        matches++;
-                    }
-                }
-
-                if (matches == 4) {
-                    Serial.println(" - MATCH"); // TEMP
-                    duplicateFound = true;
-                    break;
-                }
-            }
-
-            // if no duplicate is found, add to list of unique IDs and increment Unique ID counter
-            if (!duplicateFound) {
-                Serial.println(" - ADDED"); // TEMP
-                for (int y = 0; y < 4; y++) {
-                    newScan_uniqueIDs[newScan_storedUniqueIDs][y] = newScan_scannedIDs[x][y];
-                }
-                newScan_storedUniqueIDs++;
-            }
-        }
-
-        for (int x = 0; x < 16; x++) {
-            newScan_scores[x] = 0;
-        }
-
-        // for each stored unique ID...
-        for (int x = 0; x < newScan_storedUniqueIDs; x++) {
-            // compare it with each unique ID and increment the score for the corresponding ID
-            for (int y = 0; y < 16; x++) {
-                int matches = 0;
-                for (int z = 0; z < 4; z++) {
-                    if (newScan_uniqueIDs[y][z] == newScan_uniqueIDs[y][z]) {
-                        matches++;
-                    }
-                }
-                if (matches == 4) {
-                    newScan_scores[x]++;
-                }
-            }
-        }
-
-        // checks for ties in scoring
-        boolean tieFound = false;
-        for (int x = 0; x < newScan_storedUniqueIDs; x++) {
-            for (int y = 0; y < newScan_storedUniqueIDs; y++) {
-                if (x != y) {
-                    if (newScan_scores[x] == newScan_scores[y] && (newScan_scores[x] + newScan_scores[y]) != 0) {
-                        tieFound = true;
-                        break; // breaks inner loop
-                    }
-                }
-            }
-
-            if (tieFound) {
-                break; // breaks outer loop
-            }
-        }
-
-        // if there are no ties found, start looking for the highest-scoring ID
-        if (!tieFound) {
-            int highestScore = 0; // keeps track of the highest score
-            String bestMatch; // stores the actual ID with the highest score
-            for (int x = 0; x < newScan_storedUniqueIDs; x++) {
-                if (newScan_scores[x] > highestScore) {
-                    highestScore = newScan_scores[x];
-                    bestMatch = newScan_uniqueIDs[x];
-                }
-            }
-
-            if (lastPrinted != 9) {
-                lcd.clear();
-                lcd.setCursor(1,0);
-                lcd.print("Scan Complete!");
-                buzzerSuccess();
-                delay(1500);
-                lastPrinted = 9;
-            }
-
-            bestMatch.toUpperCase();
-            send(bestMatch); // TODO add byte stream
-            // TODO Add a timeout
-
-        }
-        // if there are ties found, retry the scan
-        else {
-            failedNewScan();
-            newScan_storedIDs = -1;
-            newScan_storedUniqueIDs = 0;
-        }
+        
     }
 }
 
-void failedNewScan() {
+void failedNewScan(int mode) {
     if (lastPrinted != 10) {
         lcd.clear();
         lcd.setCursor(2,0);
         lcd.print("Scan Failed!");
-        lcd.setCursor(0,1);
-        lcd.print("Please try again");
+        if (mode == 1) {
+            lcd.setCursor(0,1);
+            lcd.print("Please try again");
+        }
         buzzerError();
         delay(1250);
         lastPrinted = 10;
+        resetOperationState();
     }
 }
 
@@ -956,12 +890,14 @@ void buzzerSuccess() {
     noTone(buzzer);
 }
 
+// TODO Remove this and its references
 // saves data before sending it to the Serial monitor in case it is requsted again
 void send(String data) {
     Serial.println(data);
     lastSentData = data;
 }
 
+// TODO Remove this and its references
 // saves data before sending it to the Serial monitor in case it is requsted again
 void send(int data) {
     Serial.println(data);
@@ -988,6 +924,10 @@ void updateOperationState() {
     default:
         break;
     }
+}
+
+void resetOperationState() {
+    operationState = 0;
 }
 
 boolean matchID(byte id1[4], byte id2[4]) {

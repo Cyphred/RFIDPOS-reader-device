@@ -33,11 +33,11 @@
     + -> A3
     - -> GND
 
-  [GSM Module] - https://www.ayomaonline.com/programming/quickstart-sim800-sim800l-with-arduino/
-    VCC -> 5V
-    GND -> GND
-    SIM_TXD -> D8
-    SIM_RXD -> D7
+  [GSM Module] - https://randomnerdtutorials.com/sim900-gsm-gprs-shield-arduino/
+    GND -> Digital GND
+    GND next to Vin -> Digital GND
+    TXD -> D7
+    RXD -> D8
 */
 
 #include <Wire.h>              // Library for I2C communication
@@ -45,11 +45,18 @@
 #include <MFRC522.h>           // RFID Module Library
 #include <SPI.h>               // Library for communication via SPI with the RFID Module
 #include <Keypad.h>            // Library for Keypad support
+#include <SoftwareSerial.h>    // Library for Software Serial communication between the Arduino and the GSM Module
 
+// GSM Module declarations
+SoftwareSerial gsmSerial(7,8);
+
+// RFID Reader declarations
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
 #define RESETPIN 9 // RFID Module RESET Pin connected to digital pin
-
+MFRC522 nfc(SDAPIN, RESETPIN); // Initialization for RFID Reader with declared pinouts for SDA and RESET
 byte version; // Variable to store Firmware version of the RFID Module
+
+// Keypad declarations
 const byte keypadRows = 4; // Keypad Rows
 const byte keypadCols = 3; // Keypad Columns
 // Keymap for the keypad
@@ -62,18 +69,32 @@ char keys[keypadRows][keypadCols] = {
 byte rowPins[keypadRows] = {5,0,A2,3}; // Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
 byte colPins[keypadCols] = {4,6,2};  // Connect keypad COL0, COL1 and COL2 to these Arduino pins.
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCols); // Initializes the keypad. To get the char from the keypad, char key = keypad.getKey(); then if (key) to check for a valid key
+
+// LCD declarations
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LCD Library
-MFRC522 nfc(SDAPIN, RESETPIN);                          // Initialization for RFID Reader with declared pinouts for SDA and RESET
+
+// Buzzer declarations
 const int buzzer = A3;
+
+// Runtime misc variables
 const int challengeAttempts = 3;
 String lastSentData = "";
 byte lastSentByte;
 boolean deviceConnected = false;
 boolean startingState = true; // Is set to false once a connection is established with the POS System
 
+// newScan() variables
+byte newScan_scannedIDs[16][4];// will store 16 sets of 4 bytes each, representing the scanned card's UID
+int newScan_storedIDs = 0; // counts the number of bytes stored in the array
+byte newScan_uniqueIDs[16][4];// will store up to 16 sets of 4 bytes each, representing each scanned UID for comparison
+int newScan_storedUniqueIDs = 0; // keeps track the actual number unique IDs scanned
+int newScan_scores[16]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
+unsigned long newScan_lastScanTime = 0;
+
 void setup()
 {
     SPI.begin();
+    gsmSerial.begin(19200);
     Serial.begin(115200);
     pinMode(buzzer, OUTPUT);
 
@@ -87,8 +108,6 @@ void setup()
     version = nfc.getFirmwareVersion();
     
     sendByte(180); // Signals the POS that the device is ready to initiate a connection
-
-    // TODO Edit interface to send a '1' upon Initialization
 }
 
 int lastPrinted = 0; // An identifier for different LCD messages to prevent screen flickering
@@ -100,6 +119,10 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     4 - Splash screen
     5 - Place your card near the scanner
     6 - Card Scanned
+    7 - Hold your card near the scanner
+    8 - Scanning...
+    9 - Scan Complete
+    10 - Scan Failed
 */
 
 int operationState = 0; // keeps track of what operation is currently being performed
@@ -125,6 +148,10 @@ void loop() {
         switch (operationState) {
         case 1:
             scan();
+            break;
+
+        case 2:
+            newScan();
             break;
         
         default:
@@ -197,29 +224,90 @@ boolean checkNFC()
     return false;
 }
 
-// TODO Checks if the GSM Module is functional
-boolean checkGSM() {
+boolean checkGSM()
+{
+    gsmSerial.println("AT");
+    int returnValue = 2;
+    int readBytes = 0;
+
+    while (returnValue == 2) {
+        if (gsmSerial.available()) {
+            byte readByte = gsmSerial.read();
+            readBytes++;
+            if (readBytes > 6) {
+                Serial.print("\nREAD:");
+                Serial.write(readByte);
+                if (readByte == 79) {
+                    returnValue = 1;
+                }
+                else {
+                    returnValue = 0;
+                }
+            }
+        }
+    }
+    
+
+    if (returnValue == 1) {
+        return true;
+    }
     return false;
 }
 
-// TODO Gets GSM Signal Quality
+// Gets GSM Signal Quality
 int getGSMSignal() {
-    return 0;
+    gsmSerial.println("AT+CSQ\r");
+    int returnValue = -1;
+    int readBytes = 0;
+    String temp = "";
+
+    while (returnValue == -1) {
+        if (gsmSerial.available()) {
+            byte readByte = gsmSerial.read();
+            readBytes++;
+            if (readBytes > 17) {
+                if (readByte != 44) {
+                    temp += (char)readByte;
+                }
+                else
+                {
+                    break;
+                }
+                
+            }
+        }
+    }
+
+    return temp.toInt();
 }
 
-// TODO Sends an SMS with the GSM Module
-void sendSMS() {
-    buzzerError();
+// Sends an SMS with the GSM Module. Returns true if sending is successful
+boolean sendSMS(String number, String message) {
+    // AT command to set gsmSerial to SMS mode
+    gsmSerial.print("AT+CMGF=1\r"); 
+    delay(100);
+    gsmSerial.println("AT + CMGS = \"" + number + "\""); 
+    delay(100);
+    gsmSerial.println(message); 
+    delay(100);
+    // End AT command with a ^Z, ASCII code 26
+    gsmSerial.println((char)26); 
+    delay(100);
+    gsmSerial.println();
+    // Give module time to send SMS
+    delay(5000); 
+
+    // TODO find out how you can determine if the SMS has sent successfully
+    return false;
 }
 
 // Checks if an RFID tag is scanned
-// Returns the unique ID of RFID card as a 4-byte stream
-void scan()
-{
-    byte FoundTag;                                          // value to tell if a tag is found
-    byte ReadTag;                                           // Anti-collision value to read tag information
-    byte TagData[MAX_LEN];                                  // full tag data
-    byte TagSerialNumber[5];                                // tag serial number
+// Sends the unique ID of RFID card as a 4-byte stream
+void scan() {
+    byte FoundTag;           // value to tell if a tag is found
+    byte ReadTag;            // Anti-collision value to read tag information
+    byte TagData[MAX_LEN];   // full tag data
+    byte TagSerialNumber[5]; // tag serial number
     boolean validTag = false;
 
     // Prompts user to scan their RFID card
@@ -267,73 +355,97 @@ void scan()
     }
 }
 
-// Waits for an RFID card to be scanned
-// Returns the unique ID of RFID card as 8-character String
-void old_scan()
-{
-    byte FoundTag;                                          // value to tell if a tag is found
-    byte ReadTag;                                           // Anti-collision value to read tag information
-    byte TagData[MAX_LEN];                                  // full tag data
-    byte TagSerialNumber[5];                                // tag serial number
+// Used for scanning new cards
+// This process takes longer than a normal scan as it does multiple passes to ensure that the correct card information is read
+// It will make mutiple scans and compare them to increase accuracy
+void newScan() {
+    byte FoundTag;           // value to tell if a tag is found
+    byte ReadTag;            // Anti-collision value to read tag information
+    byte TagData[MAX_LEN];   // full tag data
+    byte TagSerialNumber[5]; // tag serial number
+    boolean validTag = false;
 
-    // Prompts user to scan their RFID card
-    if (lastPrinted != 5) {
+    if (lastPrinted != 7 && newScan_storedIDs == 0) {
+        // Prompts user to scan their RFID card
         lcd.clear();
         lcd.setCursor(0,0);
-        lcd.print("Place your card");
+        lcd.print("Hold your card");
         lcd.setCursor(0,1);
         lcd.print("near the scanner");
+        lastPrinted = 7;
     }
-    
-    String stringSerialNumber = ""; // String to temporarily store converted tag data
-    // repeat until the retrieved serial number is 8 characters long
-    while (stringSerialNumber.length() != 8)
-    {
+
+    // if there are not enough stored IDs from RFID Tags
+    if (newScan_storedIDs < 16) {
         // Check if a tag was detected
         // If yes, then variable FoundTag will contain "MI_OK"
         FoundTag = nfc.requestTag(MF1_REQIDL, TagData);
 
-        if (FoundTag == MI_OK)
-        {
-            delay(200);
+        if (FoundTag == MI_OK) {
+            if (lastPrinted != 8) {
+                lcd.clear();
+                lcd.setCursor(4,0);
+                lcd.print("Scanning");
+                lcd.setCursor(0,1);
+                lastPrinted = 8;
+            }
+
+            delay(100);
             ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
             memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
-            // Loop to print serial number to serial monitor
-            stringSerialNumber = "";
 
             // if tag data does not start with 0 and 32
             // I've noticed incompletely-read tag data tends to start with 0 and 32 as the firt 2 bytes
             if (!(TagSerialNumber[0] == 0 && TagSerialNumber[1] == 32)) {
-                // iterates 4 times to get the first 4 decimal values representing the scanned card's unique ID
-                // and converts it into a hex value, then stores it as a string
-                for (int i = 0; i < 4; i++)
-                {
-                    // FIXME returning incorrect card IDs
-                    // if the decimal value is lesser than 16, it is going to start with a zero
-                    // Casting into a String does not retain that zero, so it must be added manually
-                    if (TagSerialNumber[i] < 16) {
-                        stringSerialNumber += 0;
-                    }
-                    stringSerialNumber += String(TagSerialNumber[i], HEX);
+                Serial.print("Scan No. "); // TEMP
+                Serial.print(newScan_storedIDs); // TEMP
+                Serial.print(" : "); // TEMP
+                for (int x = 0; x < 4; x++) {
+                    newScan_scannedIDs[newScan_storedIDs][x] = TagSerialNumber[x];
+                    Serial.print(String(TagSerialNumber[x], HEX));
                 }
-
-                stringSerialNumber.toUpperCase(); // Convert retrieved Serial Number to all uppercase
+                Serial.println(""); // TEMP
+                newScan_storedIDs++;
+                newScan_lastScanTime = millis();
+                lcd.print(char(255));
+            }
+        }
+        // if no card is read
+        else {
+            // if scan is incomplete and no new tag is read 5 seconds after the last read,
+            // abort the scan operation
+            if ((millis() - newScan_lastScanTime) > 5000 && newScan_storedIDs > 0) {
+                failedNewScan(0);
             }
         }
     }
 
-    // Notifies user of successful scan through displayed text on the LCD and a beep
-    lcd.clear();
-    lcd.setCursor(2,0);
-    lcd.print("Card Scanned");
-    buzzerSuccess();
-    send(stringSerialNumber);
+    // if there are enough stored IDs from RFID Tags
+    else {
+        
+    }
+}
+
+void failedNewScan(int mode) {
+    if (lastPrinted != 10) {
+        lcd.clear();
+        lcd.setCursor(2,0);
+        lcd.print("Scan Failed!");
+        if (mode == 1) {
+            lcd.setCursor(0,1);
+            lcd.print("Please try again");
+        }
+        buzzerError();
+        delay(1250);
+        lastPrinted = 10;
+        resetOperationState();
+    }
 }
 
 // Used for scanning new cards
 // This process takes longer than a normal scan as it does multiple passes to ensure that the correct card information is read
 // It will make mutiple scans and compare them to increase accuracy
-void newCardScan() {
+void old_newCardScan() {
     boolean validIDAvailable = false;
     byte FoundTag;                                          // value to tell if a tag is found
     byte ReadTag;                                           // Anti-collision value to read tag information
@@ -825,12 +937,14 @@ void buzzerSuccess() {
     noTone(buzzer);
 }
 
+// TODO Remove this and its references
 // saves data before sending it to the Serial monitor in case it is requsted again
 void send(String data) {
     Serial.println(data);
     lastSentData = data;
 }
 
+// TODO Remove this and its references
 // saves data before sending it to the Serial monitor in case it is requsted again
 void send(int data) {
     Serial.println(data);
@@ -850,8 +964,24 @@ void updateOperationState() {
     case 190:
         operationState = 1; // Sets the current task to "scan()"
         break;
+    case 191:
+        operationState = 2; // Sets the current task to "newScan()"
+        break;
     
     default:
         break;
     }
+}
+
+void resetOperationState() {
+    operationState = 0;
+}
+
+boolean matchID(byte id1[4], byte id2[4]) {
+    for (int x = 0; x < 4; x++) {
+        if (id1[x] != id2[x]) {
+            return false;
+        }
+    }
+    return true;
 }

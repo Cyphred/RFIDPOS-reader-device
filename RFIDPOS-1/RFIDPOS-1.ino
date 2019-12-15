@@ -224,8 +224,33 @@ boolean checkNFC()
     return false;
 }
 
-// TODO Checks if the GSM Module is functional
-boolean checkGSM() {
+boolean checkGSM()
+{
+    gsmSerial.println("AT");
+    int returnValue = 2;
+    int readBytes = 0;
+
+    while (returnValue == 2) {
+        if (gsmSerial.available()) {
+            byte readByte = gsmSerial.read();
+            readBytes++;
+            if (readBytes > 6) {
+                Serial.print("\nREAD:");
+                Serial.write(readByte);
+                if (readByte == 79) {
+                    returnValue = 1;
+                }
+                else {
+                    returnValue = 0;
+                }
+            }
+        }
+    }
+    
+
+    if (returnValue == 1) {
+        return true;
+    }
     return false;
 }
 
@@ -236,17 +261,17 @@ int getGSMSignal() {
 
 // Sends an SMS with the GSM Module. Returns true if sending is successful
 boolean sendSMS(String number, String message) {
-    // AT command to set Sim900Serial to SMS mode
-    Sim900Serial.print("AT+CMGF=1\r"); 
+    // AT command to set gsmSerial to SMS mode
+    gsmSerial.print("AT+CMGF=1\r"); 
     delay(100);
-    Sim900Serial.println("AT + CMGS = \"" + number + "\""); 
+    gsmSerial.println("AT + CMGS = \"" + number + "\""); 
     delay(100);
-    Sim900Serial.println(message); 
+    gsmSerial.println(message); 
     delay(100);
     // End AT command with a ^Z, ASCII code 26
-    Sim900Serial.println((char)26); 
+    gsmSerial.println((char)26); 
     delay(100);
-    Sim900Serial.println();
+    gsmSerial.println();
     // Give module time to send SMS
     delay(5000); 
 

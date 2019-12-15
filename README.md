@@ -24,9 +24,9 @@ RFID Card Reader device to complement POS Implementation in Java
 - [x] Make the device hold the scanned serial number until the Java program has requested it
 
 ##### C. GSM
-- [ ] Test for GSM Module Status
-- [ ] Ask for GSM Signal Strength
-- [ ] Send SMS
+- [x] Test for GSM Module Status
+- [x] Ask for GSM Signal Strength
+- [x] Send SMS
 
 ##### D. KEYPAD
 - [x] Input functionality

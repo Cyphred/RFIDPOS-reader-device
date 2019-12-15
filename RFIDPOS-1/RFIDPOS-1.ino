@@ -254,9 +254,31 @@ boolean checkGSM()
     return false;
 }
 
-// TODO Gets GSM Signal Quality
+// Gets GSM Signal Quality
 int getGSMSignal() {
-    return 0;
+    gsmSerial.println("AT+CSQ\r");
+    int returnValue = -1;
+    int readBytes = 0;
+    String temp = "";
+
+    while (returnValue == -1) {
+        if (gsmSerial.available()) {
+            byte readByte = gsmSerial.read();
+            readBytes++;
+            if (readBytes > 17) {
+                if (readByte != 44) {
+                    temp += (char)readByte;
+                }
+                else
+                {
+                    break;
+                }
+                
+            }
+        }
+    }
+
+    return temp.toInt();
 }
 
 // Sends an SMS with the GSM Module. Returns true if sending is successful

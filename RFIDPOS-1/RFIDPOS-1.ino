@@ -91,6 +91,8 @@ int newScan_storedUniqueIDs = 0; // keeps track the actual number unique IDs sca
 int newScan_scores[16]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
 unsigned long newScan_lastScanTime = 0;
 
+byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
+
 void setup()
 {
     SPI.begin();
@@ -470,13 +472,101 @@ void newScan() {
             // abort the scan operation
             if ((millis() - newScan_lastScanTime) > 5000 && newScan_storedIDs > 0) {
                 failedNewScan(0);
+                clearNewScanVariables();
             }
         }
     }
 
     // if there are enough stored IDs from RFID Tags
     else {
-        
+        // Start checking the scanned IDs for unique entries
+        // for each item in newScan_scannedIDs
+        for (int scanned = 0; scanned < 16; scanned++) {
+            boolean duplicateFound = false;
+            // for each item in newScan_uniqueIDs
+            for (int unique = 0; unique < newScan_storedUniqueIDs; unique++) {
+                int similarity = 0;
+                // checks if each character matches and increments similarity
+                for (int x = 0; x < 4; x++) {
+                    if (newScan_scannedIDs[scanned][x] == newScan_uniqueIDs[unique][x]) {
+                        similarity++;
+                    }
+                }
+                // similarity will be 4 when all 4 bytes match, meaning a duplicate is found
+                if (similarity == 4) {
+                    duplicateFound = true;
+                    break;
+                }
+            }
+            // if no duplicate is found, the current scanned ID is a unique entry, and will be stored in newScan_uniqueIDs
+            if (!duplicateFound) {
+                for (int x = 0; x < 4; x++) {
+                    newScan_uniqueIDs[newScan_storedUniqueIDs][x] = newScan_scannedIDs[scanned][x];
+                }
+                newScan_storedUniqueIDs++;
+            }
+        }
+
+        // If there's only 1 unique ID, automatically save that as the scanned ID
+        if (newScan_storedUniqueIDs == 1) {
+            for (int x = 0; x < 4; x++) {
+                lastScannedID[x] = newScan_uniqueIDs[0][x];
+            }
+        }
+        // if there's more than 1 unique ID, start checking which one appears more times during the scan
+        else {
+            // test each unique ID against the stored scanned IDs
+            // increments the score of the current unique ID if a match is found
+            for (int unique = 0; unique < newScan_storedUniqueIDs; unique++) {
+                for (int stored = 0; stored < 16; stored++) {
+                    boolean match = true;
+                    for (int x = 0; x < 4; x++) {
+                        if (newScan_uniqueIDs[unique][x] != newScan_scannedIDs[stored][x]) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        newScan_scores[unique]++;
+                    }
+                }
+            }
+
+            // Start checking which item has a higher score
+            int highestScore = 0;
+            int highestAddress = 0;
+            for (int unique = 0; unique < newScan_storedUniqueIDs; unique++) {
+                if (newScan_scores[unique] > highestScore) {
+                    highestScore = newScan_scores[unique];
+                    highestAddress = unique;
+                }
+            }
+
+            // Save result
+            for (int x = 0; x < 4; x++) {
+                lastScannedID[x] = newScan_uniqueIDs[highestAddress][x];
+            }
+        }
+
+        // Sends card data to serial in between Text Start and Text End bytes
+        printLastScannedID();
+        clearNewScanVariables();
+        resetOperationState();
+    }
+}
+
+// Clears the variables associated with newScan() so that it is reset and ready for another operation
+void clearNewScanVariables() {
+    newScan_storedIDs = 0;
+    newScan_storedUniqueIDs = 0;
+    newScan_lastScanTime = 0;
+
+    for (int x = 0; x < 16; x++) {
+        for (int y = 0; y < 4; y++) {
+            newScan_scannedIDs[x][y] = 0;
+            newScan_uniqueIDs[x][y] = 0;
+        }
+        newScan_scores[x] = 0;
     }
 }
 
@@ -496,162 +586,11 @@ void failedNewScan(int mode) {
     }
 }
 
-// Used for scanning new cards
-// This process takes longer than a normal scan as it does multiple passes to ensure that the correct card information is read
-// It will make mutiple scans and compare them to increase accuracy
-void old_newCardScan() {
-    boolean validIDAvailable = false;
-    byte FoundTag;                                          // value to tell if a tag is found
-    byte ReadTag;                                           // Anti-collision value to read tag information
-    byte TagData[MAX_LEN];                                  // full tag data
-    byte TagSerialNumber[5];                                // tag serial number
-
-    String scannedIDs[16]; // will store 16 sets of 4 bytes each, representing the scanned card's UID
-    int storedBytes = -1; // counts the number of bytes stored in the array
-
-    while (!validIDAvailable) {
-        // keep looping until the card has been scanned 16 times
-        while (storedBytes != 16) {
-            if (storedBytes == -1) {
-                // Prompts user to scan their RFID card
-                lcd.clear();
-                lcd.setCursor(0,0);
-                lcd.print("Hold your card");
-                lcd.setCursor(0,1);
-                lcd.print("near the scanner");
-                storedBytes = 0;
-            }
-
-            // Check if a tag was detected
-            // If yes, then variable FoundTag will contain "MI_OK"
-            FoundTag = nfc.requestTag(MF1_REQIDL, TagData);
-
-            if (FoundTag == MI_OK) {
-                if (storedBytes == 0) {
-                    lcd.clear();
-                    lcd.setCursor(4,0);
-                    lcd.print("Scanning");
-                    lcd.setCursor(0,1);
-                }
-
-                delay(100);
-                ReadTag = nfc.antiCollision(TagData); // Get anti-collision value to properly read information from the tag
-                memcpy(TagSerialNumber, TagData, 4);  // Writes the tag info in TagSerialNumber
-
-                // if tag data does not start with 0 and 32
-                // I've noticed incompletely-read tag data tends to start with 0 and 32 as the firt 2 bytes
-                if (!(TagSerialNumber[0] == 0 && TagSerialNumber[1] == 32)) {
-                    String stringSerialNumber = "";
-                    // iterates 4 times to get the first 4 decimal values representing the scanned card's unique ID
-                    // and converts it into a hex value, then stores it as a string
-                    for (int x = 0; x < 4; x++) {
-                        if (TagSerialNumber[x] < 16) {
-                            stringSerialNumber += 0;
-                        }
-                        stringSerialNumber += String(TagSerialNumber[x], HEX);
-                    }
-
-                    // Stores the new string to the list of 16 scanned IDs and prints to the progress bar
-                    scannedIDs[storedBytes] = stringSerialNumber;
-                    storedBytes++;
-                    lcd.print(char(255));
-                }
-            }
-        }
-
-        String uniqueIDs[16]; // keeps track of all unique IDs scanned
-        int storedUniqueIDs = 0; // keeps track the actual number unique IDs scanned
-
-        // for each scanned ID...
-        for (String sid: scannedIDs) {
-            boolean duplicateFound = false;
-            // checks if it matches an already recognized unique ID
-            for (String s: uniqueIDs) {
-                if (sid.equals(s)) {
-                    duplicateFound = true;
-                    break;
-                }
-            }
-            // if no duplicate is found, add to list of unique IDs and increment Unique ID counter
-            if (!duplicateFound) {
-                uniqueIDs[storedUniqueIDs] = sid;
-                storedUniqueIDs++;
-            }
-        }
-
-        int scores[storedUniqueIDs]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
-        // for each stored unique ID, set the default score of zero
-        for (int x = 0; x < storedUniqueIDs; x++) {
-            scores[x] = 0;
-        }
-
-        // for each stored unique ID...
-        for (int x = 0; x < storedUniqueIDs; x++) {
-            // compare it with each unique ID and increment the score for the corresponding ID
-            for (String sid: scannedIDs) {
-                if (uniqueIDs[x].equals(sid)) {
-                    scores[x]++;
-                }
-            }
-        }
-
-        // checks for ties in scoring
-        boolean tieFound = false;
-        for (int x = 0; x < storedUniqueIDs; x++) {
-            for (int y = 0; y < storedUniqueIDs; y++) {
-                if (x != y) {
-                    if (scores[x] == scores[y] && (scores[x] + scores[y]) != 0) {
-                        tieFound = true;
-                        break; // breaks inner loop
-                    }
-                }
-            }
-
-            if (tieFound) {
-                break; // breaks outer loop
-            }
-        }
-
-        // if there are no ties found, start looking for the highest-scoring ID
-        if (!tieFound) {
-            int highestScore = 0; // keeps track of the highest score
-            String bestMatch; // stores the actual ID with the highest score
-            for (int x = 0; x < storedUniqueIDs; x++) {
-                if (scores[x] > highestScore) {
-                    highestScore = scores[x];
-                    bestMatch = uniqueIDs[x];
-                }
-            }
-
-            lcd.clear();
-            lcd.setCursor(1,0);
-            lcd.print("Scan Complete!");
-            buzzerSuccess();
-            delay(1500);
-
-            bestMatch.toUpperCase();
-            send(bestMatch);
-            validIDAvailable = true;
-        }
-        // if there are ties found, retry the scan
-        else {
-            lcd.clear();
-            lcd.setCursor(2,0);
-            lcd.print("Scan Failed!");
-            lcd.setCursor(0,1);
-            lcd.print("Please try again");
-            buzzerError();
-            delay(1250);
-            storedBytes = -1;
-            storedUniqueIDs = 0;
-        }
-    }
-}
-
-
 // TODO Document this method
+// TODO Modify this to work with the cancelling function
 void challenge(String passcodeString) {
-    char passcode[6];
+    char passcode[6]; // Stores the 6-digit passcode to be matched by the customer
+    // Convert the passcode parameter 
     for (int x = 0; x < 6; x++) {
         passcode[x] = passcodeString.charAt(x);
     }
@@ -766,6 +705,7 @@ String keypadInput() {
     return returnValue;
 }
 
+// TODO Modify this to work with the cancelling function
 // Asks user to input a new PIN twice, for confirmation
 void newPINInput() {
     String inputs[2] = {"",""};
@@ -1012,8 +952,12 @@ void sendByte(byte data) {
 
 void updateOperationState() {
     switch (lastReadByte) {
-    case 131:
-        operationState = 0;
+    case 131: // Cancels an operation
+        // If the cancelled operation is "newScan()", resets the variables associated with it
+        if (operationState == 2) {
+            clearNewScanVariables();
+        }
+        resetOperationState();
         break;
     case 132:
         operationState = 1; // Sets the current task to "scan()"
@@ -1041,15 +985,8 @@ void resetOperationState() {
     operationState = 0;
 }
 
-boolean matchID(byte id1[4], byte id2[4]) {
+void printLastScannedID() {
     for (int x = 0; x < 4; x++) {
-        if (id1[x] != id2[x]) {
-            return false;
-        }
+        Serial.write(lastScannedID[x]);
     }
-    return true;
-}
-
-String waitForDataStream(byte startMarker, byte endMarker, int length) {
-
 }

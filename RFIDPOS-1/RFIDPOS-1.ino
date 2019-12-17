@@ -158,10 +158,10 @@ void loop() {
 
         case 3:
             if (checkGSM()) {
-                Serial.println(1);
+                Serial.print(1);
             }
             else {
-                Serial.println(0);
+                Serial.print(0);
             }
             resetOperationState();
             break;

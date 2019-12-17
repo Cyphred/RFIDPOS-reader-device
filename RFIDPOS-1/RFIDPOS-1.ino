@@ -107,7 +107,7 @@ void setup()
     nfc.begin();
     version = nfc.getFirmwareVersion();
     
-    sendByte(180); // Signals the POS that the device is ready to initiate a connection
+    sendByte(128); // Signals the POS that the device is ready to initiate a connection
 }
 
 int lastPrinted = 0; // An identifier for different LCD messages to prevent screen flickering
@@ -153,6 +153,26 @@ void loop() {
         case 2:
             newScan();
             break;
+
+        case 3:
+            if (checkGSM()) {
+                Serial.println(1);
+            }
+            else {
+                Serial.println(0);
+            }
+            resetOperationState();
+            break;
+
+        case 4:
+            Serial.print(getGSMSignal());
+            resetOperationState();
+            break;
+
+        case 5:
+            sendSMS();
+            resetOperationState();
+            break;
         
         default:
             break;
@@ -189,7 +209,7 @@ void loop() {
         }
 
         // if byte 128 is received, set status as connected
-        if (lastReadByte == 128) {
+        if (lastReadByte == 129) {
             lcd.clear();
             lcd.setCursor(3,0);
             lcd.print("Connection");
@@ -200,7 +220,7 @@ void loop() {
             lastPrinted = 2;
             startingState = false;
             deviceConnected = true;
-            sendByte(181);
+            sendByte(130);
         }
     }
 }
@@ -235,8 +255,6 @@ boolean checkGSM()
             byte readByte = gsmSerial.read();
             readBytes++;
             if (readBytes > 6) {
-                Serial.print("\nREAD:");
-                Serial.write(readByte);
                 if (readByte == 79) {
                     returnValue = 1;
                 }
@@ -246,7 +264,6 @@ boolean checkGSM()
             }
         }
     }
-    
 
     if (returnValue == 1) {
         return true;
@@ -282,7 +299,51 @@ int getGSMSignal() {
 }
 
 // Sends an SMS with the GSM Module. Returns true if sending is successful
-boolean sendSMS(String number, String message) {
+void sendSMS() {
+    lcd.clear();
+    lcd.setCursor(2,0);
+    lcd.print("Sending SMS");
+
+    String number = ""; // Variable to store the customer's phone number
+    int readState = 0; // Variable to keep track of the waiting status for the customer's number to arrive over serial
+    // loops and stores the arriving data into String number until ETX or end of text character arrives
+    while (readState != 2) {
+        byte readByte = Serial.read();
+        if ((readByte > 47 && readByte < 58) || (readByte == 2 || readByte == 3)) {
+            if (readByte == 2 || readByte == 3) {
+                readState++;
+            }
+            else if (readState == 1) {
+                number += (char)readByte;
+            }
+            
+            if (readState == 2) {
+                if (number.length() != 10) {
+                    readState = 0;
+                    number = "";
+                    sendByte(137); // Tells the POS that the received data is incomplete, and asks to resend
+                }
+                else {
+                    sendByte(138); // Tells the POS that the received data is complete
+                }
+            }
+        }
+    }
+
+    String message = "";
+    readState = 0;
+    while (readState != 2) {
+        byte readByte = Serial.read();
+        if (readByte != 255) {
+            if (readByte == 2 || readByte == 3) {
+                readState++;
+            }
+            else if (readState == 1) {
+                message += (char)readByte;
+            }
+        }
+    }
+
     // AT command to set gsmSerial to SMS mode
     gsmSerial.print("AT+CMGF=1\r"); 
     delay(100);
@@ -296,9 +357,6 @@ boolean sendSMS(String number, String message) {
     gsmSerial.println();
     // Give module time to send SMS
     delay(5000); 
-
-    // TODO find out how you can determine if the SMS has sent successfully
-    return false;
 }
 
 // Checks if an RFID tag is scanned
@@ -359,6 +417,7 @@ void scan() {
 // This process takes longer than a normal scan as it does multiple passes to ensure that the correct card information is read
 // It will make mutiple scans and compare them to increase accuracy
 void newScan() {
+    // FIXME Fails after cancelling
     byte FoundTag;           // value to tell if a tag is found
     byte ReadTag;            // Anti-collision value to read tag information
     byte TagData[MAX_LEN];   // full tag data
@@ -397,14 +456,9 @@ void newScan() {
             // if tag data does not start with 0 and 32
             // I've noticed incompletely-read tag data tends to start with 0 and 32 as the firt 2 bytes
             if (!(TagSerialNumber[0] == 0 && TagSerialNumber[1] == 32)) {
-                Serial.print("Scan No. "); // TEMP
-                Serial.print(newScan_storedIDs); // TEMP
-                Serial.print(" : "); // TEMP
                 for (int x = 0; x < 4; x++) {
                     newScan_scannedIDs[newScan_storedIDs][x] = TagSerialNumber[x];
-                    Serial.print(String(TagSerialNumber[x], HEX));
                 }
-                Serial.println(""); // TEMP
                 newScan_storedIDs++;
                 newScan_lastScanTime = millis();
                 lcd.print(char(255));
@@ -958,15 +1012,25 @@ void sendByte(byte data) {
 
 void updateOperationState() {
     switch (lastReadByte) {
-    case 129:
+    case 131:
         operationState = 0;
         break;
-    case 190:
+    case 132:
         operationState = 1; // Sets the current task to "scan()"
         break;
-    case 191:
+    case 133:
         operationState = 2; // Sets the current task to "newScan()"
         break;
+    case 134:
+        operationState = 3; // Sets the current task to "checkGSM()"
+        break;
+    case 135:
+        operationState = 4; // Sets the current task to "getGSMSignal()"
+        break;
+    case 136:
+        operationState = 5; // Sets the current task to "sendSMS()"
+        break;
+        
     
     default:
         break;
@@ -984,4 +1048,8 @@ boolean matchID(byte id1[4], byte id2[4]) {
         }
     }
     return true;
+}
+
+String waitForDataStream(byte startMarker, byte endMarker, int length) {
+
 }

@@ -591,18 +591,6 @@ void challenge(String passcodeString) {
 
 }
 
-// Waits for a key on the keypad to be pressed before returning the pressed number
-String keypadInput() {
-    String returnValue = "";
-    while (returnValue.length() != 1) {
-        char key = keypad.getKey();
-        if (key) {
-            returnValue += key;
-        }
-    }
-    return returnValue;
-}
-
 // TODO Modify this to work with the cancelling function
 // Asks user to input a new PIN twice, for confirmation
 void newPINInput() {

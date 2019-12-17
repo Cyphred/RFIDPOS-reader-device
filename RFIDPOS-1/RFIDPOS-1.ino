@@ -92,7 +92,6 @@ int newScan_scores[16]; // keeps track of how many times each unique ID has appe
 unsigned long newScan_lastScanTime = 0;
 
 // challenge() and newPINInput() misc variables
-// TODO include these in the reset method
 boolean pin_passcodeReceived = false;
 String pin_passcode = "";
 boolean pin_inputStreamActive = false;
@@ -100,6 +99,7 @@ char pin_inputCharacters[6];
 char pin_inputCount = 0;
 boolean pin_inputConfirmed = false;
 int pin_retriesLeft = 3;
+boolean pin_backConfirmDialogVisible = false;
 
 // keypad
 unsigned long lastKeyPress;
@@ -131,7 +131,7 @@ void setup()
 
 int lastPrinted = 0; // An identifier for different LCD messages to prevent screen flickering
 /*
-    ID list
+    [lastPrinted Guide]
     1 - Waiting for connection
     2 - Connection Established
     3 - Disconnected
@@ -143,8 +143,13 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     9 - Scan Complete
     10 - Scan Failed
     11 - Fetching account information
-    12 - PIN:
+    12 - PIN: (challenge)
     13 - Invalid PIN, X retries left
+    14 - PIN: (newPINInput)
+    15 - CONFIRM:
+    16 - PIN Confirmed
+    17 - PIN does not match
+    18 - 
 */
 
 int operationState = 0; // keeps track of what operation is currently being performed
@@ -765,7 +770,7 @@ void challenge() {
     }
 }
 
-// Clears the variables associated with challenge() so that it is reset and ready for another operation
+// Clears the variables associated with challenge() and newPINInput() so that it is reset and ready for another operation
 void resetPINVariables() {
     pin_passcodeReceived = false;
     pin_passcode = "";
@@ -773,12 +778,210 @@ void resetPINVariables() {
     pin_inputCount = 0;
     pin_inputConfirmed = false;
     pin_retriesLeft = 3;
+    pin_backConfirmDialogVisible = false;
 }
 
-// TODO Modify this to work with the cancelling function
 // Asks user to input a new PIN twice, for confirmation
 void newPINInput() {
-    
+    // Stops any keypad sounds
+    keypadBeepStop(100);
+
+    if (!pin_passcodeReceived) {
+        if (lastPrinted != 14) {
+            lcd.clear();
+            lcd.setCursor(2,0);
+            lcd.print("PIN:");
+            lcd.setCursor(0,1);
+            lcd.print("[*]OK");
+            lcd.setCursor(7,1);
+            lcd.print("[#]DELETE");
+            lcd.setCursor(7,0);
+            lastPrinted = 14;
+        }
+
+        // if the current input has not been completed yet
+        char key = keypad.getKey();
+        // if a key is pressed
+        if (key) {
+            lastKeyPress = millis(); // keeps track of the last time a button is pressed
+            // if a number key is pressed
+            if (key > 47 && key < 58) {
+                // check if there are adding another digit is still possible
+                // if input length is less than 6, add another digit
+                if (pin_inputCount < 6) {
+                    pin_inputCharacters[pin_inputCount] = key;
+                    pin_inputCount++;
+                    lcd.write(42); // prints an asterisk to the LCD
+                    keypadBeepStart(2000);
+                }
+                // if input length is 6, play a buzz and do not add digit to input
+                else {
+                    keypadBeepStart(500);
+                }
+            }
+            // if '#' key is pressed
+            else if (key == 35) {
+                // if input is not empty, remove the last character
+                if (pin_inputCount > 0) {
+                    lcd.setCursor((pin_inputCount + 6),0);
+                    lcd.write(32);
+                    lcd.setCursor((pin_inputCount + 6),0);
+                    pin_inputCount--;
+                    keypadBeepStart(2000);
+                }
+                // if input is empty
+                else {
+                    keypadBeepStart(500);
+                }
+            }
+            // if '*' is pressed
+            else {
+                // if input length is 6
+                if (pin_inputCount == 6) {
+                    // Store input as the passcode to be matched
+                    for (int x = 0; x < 6; x++) {
+                        pin_passcode += pin_inputCharacters[x];
+                    }
+                    pin_passcodeReceived = true;
+                    pin_inputCount = 0;
+                    buzzerSuccess();
+                }
+                // if input length is not 6
+                else {
+                    keypadBeepStart(500);
+                }
+            }
+        }
+    }
+    // if passcode is available
+    else {
+        // if confirm dialog for going back is not visible
+        if (!pin_backConfirmDialogVisible) {
+            if (lastPrinted != 15) {
+                lcd.clear();
+                lcd.setCursor(0,0);
+                lcd.print("CONFIRM:");
+                lcd.setCursor(0,1);
+                lcd.print("[*]OK");
+                lcd.setCursor(7,1);
+                lcd.print("[#]DELETE");
+                lcd.setCursor(9,0);
+                lastPrinted = 15;
+            }
+
+            char key = keypad.getKey();
+            if (key) {
+                lastKeyPress = millis(); // keeps track of the last time a button is pressed
+                // if a number key is pressed
+                if (key > 47 && key < 58) {
+                    // check if there are adding another digit is still possible
+                    // if input length is less than 6, add another digit
+                    if (pin_inputCount < 6) {
+                        pin_inputCharacters[pin_inputCount] = key;
+                        pin_inputCount++;
+                        lcd.write(42); // prints an asterisk to the LCD
+                        keypadBeepStart(2000);
+                    }
+                    // if input length is 6, play a buzz and do not add digit to input
+                    else {
+                        keypadBeepStart(500);
+                    }
+                }
+                // if '#' key is pressed
+                else if (key == 35) {
+                    // if input is not empty, remove the last character
+                    if (pin_inputCount > 0) {
+                        lcd.setCursor((pin_inputCount + 8),0);
+                        lcd.write(32);
+                        lcd.setCursor((pin_inputCount + 8),0);
+                        pin_inputCount--;
+                        keypadBeepStart(2000);
+                    }
+                    // if input is empty
+                    else {
+                        pin_backConfirmDialogVisible = true;
+                    }
+                }
+                // if '*' is pressed
+                else {
+                    // if input length is 6
+                    if (pin_inputCount == 6) {
+                        boolean match = true;
+                        for (int x = 0; x < 6; x++) {
+                            if (pin_inputCharacters[x] != pin_passcode.charAt(x)) {
+                                match = false;
+                                break;
+                            }
+                        }
+
+                        if (match) {
+                            lcd.clear();
+                            lcd.setCursor(1,0);
+                            lcd.print("PIN Confirmed");
+                            lastPrinted = 16;
+                            buzzerSuccess();
+                            delay(2500);
+                            Serial.print(pin_passcode);
+                            resetPINVariables();
+                            resetOperationState();
+                        }
+                        else {
+                            lcd.clear();
+                            lcd.setCursor(2,0);
+                            lcd.print("PIN does not");
+                            lcd.setCursor(5,1);
+                            lcd.print("match");
+                            lastPrinted = 17;
+
+                            pin_inputCount = 0;
+
+                            buzzerError();
+                            delay(2250);
+                        }
+                    }
+                    // if input length is not 6
+                    else {
+                        keypadBeepStart(500);
+                    }
+                }
+            }
+        }
+        // if confirm dialog for going back is visible
+        else {
+            if (lastPrinted != 18) {
+                lcd.clear();
+                lcd.setCursor(2,0);
+                lcd.print("Change PIN?");
+                lcd.setCursor(0,1);
+                lcd.print("[*]YES");
+                lcd.setCursor(11,1);
+                lcd.print("[#]NO");
+                lastPrinted = 18;
+            }
+
+            char key = keypad.getKey();
+            if (key) {
+                // if '*' key is pressed
+                if (key == 42) {
+                    pin_backConfirmDialogVisible = false;
+                    pin_passcodeReceived = false;
+                    pin_passcode = "";
+                    pin_inputCount = 0;
+                    keypadBeepStart(2000);
+                }
+                // if '#' key is pressed
+                else if (key == 35) {
+                    pin_backConfirmDialogVisible = false;
+                    keypadBeepStart(2000);
+                }
+                // if a number is pressed
+                else {
+                    keypadBeepStart(500);
+                }
+            }
+        }
+        
+    }
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time
@@ -812,8 +1015,8 @@ void updateOperationState() {
         if (operationState == 2) {
             resetNewScanVariables();
         }
-        // If the cancelled operation is "challenge()", resets the variables associated with it
-        else if (operationState == 6) {
+        // If the cancelled operation is "challenge()" or "newPINInput()", resets the variables associated with it
+        else if (operationState == 6 || operationState == 7) {
             resetPINVariables();
         }
         resetOperationState();

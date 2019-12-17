@@ -91,15 +91,15 @@ int newScan_storedUniqueIDs = 0; // keeps track the actual number unique IDs sca
 int newScan_scores[16]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
 unsigned long newScan_lastScanTime = 0;
 
-// challenge() misc variables
+// challenge() and newPINInput() misc variables
 // TODO include these in the reset method
-boolean challenge_passcodeReceived = false;
-String challenge_passcode = "";
-boolean challenge_inputStreamActive = false;
-char challenge_inputCharacters[6];
-char challenge_inputCount = 0;
-boolean challenge_inputConfirmed = false;
-int challenge_retriesLeft = 3;
+boolean pin_passcodeReceived = false;
+String pin_passcode = "";
+boolean pin_inputStreamActive = false;
+char pin_inputCharacters[6];
+char pin_inputCount = 0;
+boolean pin_inputConfirmed = false;
+int pin_retriesLeft = 3;
 
 // keypad
 unsigned long lastKeyPress;
@@ -198,6 +198,10 @@ void loop() {
         
         case 6:
             challenge();
+            break;
+
+        case 7:
+            newPINInput();
             break;
 
         default:
@@ -612,7 +616,7 @@ void failedNewScan(int mode) {
 
 void challenge() {
     // if the passcode is available
-    if (challenge_passcodeReceived) {
+    if (pin_passcodeReceived) {
         if (lastPrinted != 12) {
             lcd.clear();
             lcd.setCursor(2,0);
@@ -627,7 +631,7 @@ void challenge() {
         keypadBeepStop(100);
 
         // if the current input has not been completed yet
-        if (!challenge_inputConfirmed) {
+        if (!pin_inputConfirmed) {
             char key = keypad.getKey();
             // if a key is pressed
             if (key) {
@@ -636,9 +640,9 @@ void challenge() {
                 if (key > 47 && key < 58) {
                     // check if there are adding another digit is still possible
                     // if input length is less than 6, add another digit
-                    if (challenge_inputCount < 6) {
-                        challenge_inputCharacters[challenge_inputCount] = key;
-                        challenge_inputCount++;
+                    if (pin_inputCount < 6) {
+                        pin_inputCharacters[pin_inputCount] = key;
+                        pin_inputCount++;
                         lcd.write(42); // prints an asterisk to the LCD
                         keypadBeepStart(2000);
                     }
@@ -650,11 +654,11 @@ void challenge() {
                 // if '#' key is pressed
                 else if (key == 35) {
                     // if input is not empty, remove the last character
-                    if (challenge_inputCount > 0) {
-                        lcd.setCursor((challenge_inputCount + 6),0);
+                    if (pin_inputCount > 0) {
+                        lcd.setCursor((pin_inputCount + 6),0);
                         lcd.write(32);
-                        lcd.setCursor((challenge_inputCount + 6),0);
-                        challenge_inputCount--;
+                        lcd.setCursor((pin_inputCount + 6),0);
+                        pin_inputCount--;
                         keypadBeepStart(2000);
                     }
                     // if input is not empty
@@ -668,16 +672,16 @@ void challenge() {
                 }
             }
 
-            if (challenge_inputCount == 6 && (millis() - lastKeyPress) > 2000) {
-                challenge_inputConfirmed = true;
+            if (pin_inputCount == 6 && (millis() - lastKeyPress) > 2000) {
+                pin_inputConfirmed = true;
             }
         }
         // if the input has been completed
         else {
-            if (challenge_retriesLeft > 0) {
+            if (pin_retriesLeft > 0) {
                 boolean match = true;
                 for (int x = 0; x < 6; x++) {
-                    if (challenge_inputCharacters[x] != challenge_passcode.charAt(x)) {
+                    if (pin_inputCharacters[x] != pin_passcode.charAt(x)) {
                         match = false;
                         break;
                     }
@@ -691,29 +695,29 @@ void challenge() {
                     lcd.print("Succesful");
                     buzzerSuccess();
                     delay(2500);
-                    resetChallengeVariables();
+                    resetPINVariables();
                     resetOperationState();
                     Serial.print(1);
                 }
                 else {
-                    challenge_retriesLeft--;
+                    pin_retriesLeft--;
                     lcd.clear();
                     lcd.setCursor(2,0);
                     lcd.print("Invalid PIN");
                     lcd.setCursor(1,1);
-                    lcd.print(challenge_retriesLeft);
+                    lcd.print(pin_retriesLeft);
                     lcd.setCursor(3,1);
                     lcd.print("retries left");
                     lastPrinted = 13;
 
-                    challenge_inputCount = 0;
-                    challenge_inputConfirmed = false;
+                    pin_inputCount = 0;
+                    pin_inputConfirmed = false;
 
                     buzzerError();
                     delay(2250);
 
-                    if (challenge_retriesLeft == 0) {
-                        resetChallengeVariables();
+                    if (pin_retriesLeft == 0) {
+                        resetPINVariables();
                         resetOperationState();
                         Serial.print(0);
                     }
@@ -733,25 +737,25 @@ void challenge() {
         }
         
         // if input stream is inactive
-        if (!challenge_inputStreamActive) {
+        if (!pin_inputStreamActive) {
             // if the stream start character is received
             if (lastReadByte == 2) {
-                challenge_inputStreamActive = true;
+                pin_inputStreamActive = true;
             }
         }
         // if input stream is active
         else {
             // if the last read byte is valid
             if (lastReadByte > 47 && lastReadByte < 58) {
-                challenge_passcode += (char)lastReadByte;
+                pin_passcode += (char)lastReadByte;
             }
             else {
-                if (lastReadByte == 3 && challenge_passcode.length() == 6) {
-                    challenge_inputStreamActive = false;
-                    challenge_passcodeReceived = true;
+                if (lastReadByte == 3 && pin_passcode.length() == 6) {
+                    pin_inputStreamActive = false;
+                    pin_passcodeReceived = true;
                 }
                 else if (lastReadByte != 255) {
-                    resetChallengeVariables();
+                    resetPINVariables();
                     resetOperationState();
                     sendByte(140);
                 }
@@ -762,19 +766,19 @@ void challenge() {
 }
 
 // Clears the variables associated with challenge() so that it is reset and ready for another operation
-void resetChallengeVariables() {
-    challenge_passcodeReceived = false;
-    challenge_passcode = "";
-    challenge_inputStreamActive = false;
-    challenge_inputCount = 0;
-    challenge_inputConfirmed = false;
-    challenge_retriesLeft = 3;
+void resetPINVariables() {
+    pin_passcodeReceived = false;
+    pin_passcode = "";
+    pin_inputStreamActive = false;
+    pin_inputCount = 0;
+    pin_inputConfirmed = false;
+    pin_retriesLeft = 3;
 }
 
 // TODO Modify this to work with the cancelling function
 // Asks user to input a new PIN twice, for confirmation
 void newPINInput() {
-
+    
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time
@@ -810,7 +814,7 @@ void updateOperationState() {
         }
         // If the cancelled operation is "challenge()", resets the variables associated with it
         else if (operationState == 6) {
-            resetChallengeVariables();
+            resetPINVariables();
         }
         resetOperationState();
         break;
@@ -831,6 +835,9 @@ void updateOperationState() {
         break;
     case 139:
         operationState = 6; // Sets the current task to "challenge()"
+        break;
+    case 141:
+        operationState = 7; // Sets the current task to "newPINInput()"
         break;
     
     default:

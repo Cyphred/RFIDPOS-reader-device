@@ -452,7 +452,6 @@ void scan() {
 // This process takes longer than a normal scan as it does multiple passes to ensure that the correct card information is read
 // It will make mutiple scans and compare them to increase accuracy
 void newScan() {
-    // FIXME Fails after cancelling
     byte FoundTag;           // value to tell if a tag is found
     byte ReadTag;            // Anti-collision value to read tag information
     byte TagData[MAX_LEN];   // full tag data
@@ -580,6 +579,13 @@ void newScan() {
                 lastScannedID[x] = newScan_uniqueIDs[highestAddress][x];
             }
         }
+
+        lcd.clear();
+        lcd.setCursor(1,0);
+        lcd.print("Scan Complete");
+        buzzerSuccess();
+        delay(2500);
+        lastPrinted = 9;
 
         // Sends card data to serial in between Text Start and Text End bytes
         printLastScannedID();

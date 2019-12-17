@@ -99,10 +99,11 @@ boolean challenge_inputStreamActive = false;
 char challenge_inputCharacters[6];
 char challenge_inputCount = 0;
 boolean challenge_inputConfirmed = false;
+int challenge_retriesLeft = 3;
 
 // keypad
 unsigned long lastKeyPress;
-boolean enableKeypadSounds = true;
+boolean enableKeypadSounds = false;
 unsigned long beepStart;
 int beepState = 0;
 int keypadBeepTime = 50;
@@ -143,6 +144,7 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     10 - Scan Failed
     11 - Fetching account information
     12 - PIN:
+    13 - Invalid PIN, X retries left
 */
 
 int operationState = 0; // keeps track of what operation is currently being performed
@@ -608,7 +610,6 @@ void failedNewScan(int mode) {
     }
 }
 
-// TODO Modify this to work with the cancelling function
 void challenge() {
     // if the passcode is available
     if (challenge_passcodeReceived) {
@@ -622,48 +623,101 @@ void challenge() {
             lastPrinted = 12;
         }
 
+        // Stops any keypad sounds
         keypadBeepStop(100);
 
+        // if the current input has not been completed yet
         if (!challenge_inputConfirmed) {
             char key = keypad.getKey();
             // if a key is pressed
             if (key) {
-                lastKeyPress = millis();
+                lastKeyPress = millis(); // keeps track of the last time a button is pressed
                 // if a number key is pressed
                 if (key > 47 && key < 58) {
+                    // check if there are adding another digit is still possible
+                    // if input length is less than 6, add another digit
                     if (challenge_inputCount < 6) {
                         challenge_inputCharacters[challenge_inputCount] = key;
                         challenge_inputCount++;
-                        lcd.write(42);
+                        lcd.write(42); // prints an asterisk to the LCD
                         keypadBeepStart(2000);
                     }
+                    // if input length is 6, play a buzz and do not add digit to input
                     else {
                         keypadBeepStart(500);
                     }
                 }
                 // if '#' key is pressed
                 else if (key == 35) {
+                    // if input is not empty, remove the last character
                     if (challenge_inputCount > 0) {
+                        lcd.setCursor((challenge_inputCount + 6),0);
+                        lcd.write(32);
+                        lcd.setCursor((challenge_inputCount + 6),0);
                         challenge_inputCount--;
-                        lcd.setCursor(7,0);
-                        for (int x = 0; x < 6; x++) {
-                            lcd.write(32);
-                        }
-                        lcd.setCursor(7,0);
-                        for (int x = 0; x < challenge_inputCount; x++) {
-                            lcd.write(42);
-                        }
                         keypadBeepStart(2000);
                     }
+                    // if input is not empty
                     else {
                         keypadBeepStart(500);
                     }
                 }
-
-                for (int x = 0; x < challenge_inputCount; x++) {
-                    Serial.print(challenge_inputCharacters[x]);
+                // if '*' is pressed
+                else {
+                    keypadBeepStart(500);
                 }
-                Serial.println();
+            }
+
+            if (challenge_inputCount == 6 && (millis() - lastKeyPress) > 2000) {
+                challenge_inputConfirmed = true;
+            }
+        }
+        // if the input has been completed
+        else {
+            if (challenge_retriesLeft > 0) {
+                boolean match = true;
+                for (int x = 0; x < 6; x++) {
+                    if (challenge_inputCharacters[x] != challenge_passcode.charAt(x)) {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match) {
+                    lcd.clear();
+                    lcd.setCursor(2,0);
+                    lcd.print("Verification");
+                    lcd.setCursor(3,1);
+                    lcd.print("Succesful");
+                    buzzerSuccess();
+                    delay(2500);
+                    resetChallengeVariables();
+                    resetOperationState();
+                    Serial.print(1);
+                }
+                else {
+                    challenge_retriesLeft--;
+                    lcd.clear();
+                    lcd.setCursor(2,0);
+                    lcd.print("Invalid PIN");
+                    lcd.setCursor(1,1);
+                    lcd.print(challenge_retriesLeft);
+                    lcd.setCursor(3,1);
+                    lcd.print("retries left");
+                    lastPrinted = 13;
+
+                    challenge_inputCount = 0;
+                    challenge_inputConfirmed = false;
+
+                    buzzerError();
+                    delay(2250);
+
+                    if (challenge_retriesLeft == 0) {
+                        resetChallengeVariables();
+                        resetOperationState();
+                        Serial.print(0);
+                    }
+                }
             }
         }
     }
@@ -681,7 +735,7 @@ void challenge() {
         // if input stream is inactive
         if (!challenge_inputStreamActive) {
             // if the stream start character is received
-            if (lastReadByte == 33) {// TEMP Change this to 2
+            if (lastReadByte == 2) {
                 challenge_inputStreamActive = true;
             }
         }
@@ -692,12 +746,11 @@ void challenge() {
                 challenge_passcode += (char)lastReadByte;
             }
             else {
-                if (lastReadByte == 34 && challenge_passcode.length() == 6) { // TEMP Change this to 3
+                if (lastReadByte == 3 && challenge_passcode.length() == 6) {
                     challenge_inputStreamActive = false;
                     challenge_passcodeReceived = true;
                 }
                 else if (lastReadByte != 255) {
-                    Serial.println("Invalid character found"); // TEMP
                     resetChallengeVariables();
                     resetOperationState();
                     sendByte(140);
@@ -711,8 +764,11 @@ void challenge() {
 // Clears the variables associated with challenge() so that it is reset and ready for another operation
 void resetChallengeVariables() {
     challenge_passcodeReceived = false;
-    challenge_inputStreamActive = false;
     challenge_passcode = "";
+    challenge_inputStreamActive = false;
+    challenge_inputCount = 0;
+    challenge_inputConfirmed = false;
+    challenge_retriesLeft = 3;
 }
 
 // TODO Modify this to work with the cancelling function
@@ -728,14 +784,6 @@ void buzzerError()
     delay(250);
     noTone(buzzer);
     delay(250);
-    tone(buzzer, 500);
-    delay(250);
-    noTone(buzzer);
-}
-
-// Plays a brief error tone for 250ms so I don't have to write these couple lines down every single time
-void buzzerQuickError()
-{
     tone(buzzer, 500);
     delay(250);
     noTone(buzzer);

@@ -91,6 +91,19 @@ int newScan_storedUniqueIDs = 0; // keeps track the actual number unique IDs sca
 int newScan_scores[16]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
 unsigned long newScan_lastScanTime = 0;
 
+// challenge() misc variables
+boolean challenge_passcodeReceived = false;
+String challenge_passcode = "";
+boolean challenge_inputStreamActive = false;
+char challenge_inputCharacters[6];
+char challenge_inputCount = 0;
+
+// keypad sounds
+boolean enableKeypadSounds = true;
+unsigned long beepStart;
+int beepState = 0;
+int keypadBeepTime = 50;
+
 byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
 
 void setup()
@@ -125,6 +138,8 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     8 - Scanning...
     9 - Scan Complete
     10 - Scan Failed
+    11 - Fetching account information
+    12 - 
 */
 
 int operationState = 0; // keeps track of what operation is currently being performed
@@ -176,6 +191,10 @@ void loop() {
             resetOperationState();
             break;
         
+        case 6:
+            challenge();
+            break;
+
         default:
             break;
         }
@@ -472,7 +491,7 @@ void newScan() {
             // abort the scan operation
             if ((millis() - newScan_lastScanTime) > 5000 && newScan_storedIDs > 0) {
                 failedNewScan(0);
-                clearNewScanVariables();
+                resetNewScanVariables();
             }
         }
     }
@@ -550,13 +569,13 @@ void newScan() {
 
         // Sends card data to serial in between Text Start and Text End bytes
         printLastScannedID();
-        clearNewScanVariables();
+        resetNewScanVariables();
         resetOperationState();
     }
 }
 
 // Clears the variables associated with newScan() so that it is reset and ready for another operation
-void clearNewScanVariables() {
+void resetNewScanVariables() {
     newScan_storedIDs = 0;
     newScan_storedUniqueIDs = 0;
     newScan_lastScanTime = 0;
@@ -587,14 +606,89 @@ void failedNewScan(int mode) {
 }
 
 // TODO Modify this to work with the cancelling function
-void challenge(String passcodeString) {
+void challenge() {
+    // if the passcode is available
+    if (challenge_passcodeReceived) {
+        if (lastPrinted != 12) {
+            lcd.clear();
+            lcd.setCursor(2,0);
+            lcd.print("PIN:");
+            lcd.setCursor(7,1);
+            lcd.print("[#]DELETE");
+            lcd.setCursor(7,0);
+            lastPrinted = 12;
+        }
 
+        // Stops the keypad beep
+        if (enableKeypadSounds && beepState == 1 && (millis() - beepStart) > keypadBeepTime) {
+            beepState = 0;
+            noTone(buzzer);
+        }
+
+        char key = keypad.getKey();
+        // if a key is pressed
+        if (key) {
+            // Starts the keypad beep
+            if (beepState == 0 && enableKeypadSounds) {
+                beepState = 1;
+                tone(buzzer, 2000);
+                beepStart = millis();
+            }
+
+        }
+    }
+    // if the passcode is not available
+    else {
+        if (lastPrinted != 11) {
+            lcd.clear();
+            lcd.setCursor(0,0);
+            lcd.print("Fetching account");
+            lcd.setCursor(0,1);
+            lcd.print("information...");
+            lastPrinted = 11;
+        }
+        
+        // if input stream is inactive
+        if (!challenge_inputStreamActive) {
+            // if the stream start character is received
+            if (lastReadByte == 33) {// TEMP Change this to 2
+                challenge_inputStreamActive = true;
+            }
+        }
+        // if input stream is active
+        else {
+            // if the last read byte is valid
+            if (lastReadByte > 47 && lastReadByte < 58) {
+                challenge_passcode += (char)lastReadByte;
+            }
+            else {
+                if (lastReadByte == 34 && challenge_passcode.length() == 6) { // TEMP Change this to 3
+                    challenge_inputStreamActive = false;
+                    challenge_passcodeReceived = true;
+                }
+                else if (lastReadByte != 255) {
+                    Serial.println("Invalid character found"); // TEMP
+                    resetChallengeVariables();
+                    resetOperationState();
+                    sendByte(140);
+                }
+            }
+            
+        }
+    }
+}
+
+// Clears the variables associated with challenge() so that it is reset and ready for another operation
+void resetChallengeVariables() {
+    challenge_passcodeReceived = false;
+    challenge_inputStreamActive = false;
+    challenge_passcode = "";
 }
 
 // TODO Modify this to work with the cancelling function
 // Asks user to input a new PIN twice, for confirmation
 void newPINInput() {
-    
+
 }
 
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time
@@ -634,7 +728,11 @@ void updateOperationState() {
     case 131: // Cancels an operation
         // If the cancelled operation is "newScan()", resets the variables associated with it
         if (operationState == 2) {
-            clearNewScanVariables();
+            resetNewScanVariables();
+        }
+        // If the cancelled operation is "challenge()", resets the variables associated with it
+        else if (operationState == 6) {
+            resetChallengeVariables();
         }
         resetOperationState();
         break;
@@ -653,7 +751,9 @@ void updateOperationState() {
     case 136:
         operationState = 5; // Sets the current task to "sendSMS()"
         break;
-        
+    case 139:
+        operationState = 6; // Sets the current task to "challenge()"
+        break;
     
     default:
         break;

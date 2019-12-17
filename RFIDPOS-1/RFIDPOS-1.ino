@@ -209,6 +209,10 @@ void loop() {
             newPINInput();
             break;
 
+        case 8:
+            testConnection();
+            break;
+
         default:
             break;
         }
@@ -256,6 +260,7 @@ void loop() {
             startingState = false;
             deviceConnected = true;
             sendByte(130);
+            lastConnectivityCheck = millis();
         }
     }
 }
@@ -1048,6 +1053,9 @@ void updateOperationState() {
     case 141:
         operationState = 7; // Sets the current task to "newPINInput()"
         break;
+    case 141:
+        operationState = 8; // Sets the current task to "testConnection()"
+        break;
     
     default:
         break;
@@ -1079,4 +1087,9 @@ void keypadBeepStop(int time) {
         beepState = 0;
         noTone(buzzer);
     }
+}
+
+void testConnection() {
+    Serial.print(1);
+    resetOperationState();
 }

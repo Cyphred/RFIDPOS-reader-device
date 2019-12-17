@@ -586,111 +586,9 @@ void failedNewScan(int mode) {
     }
 }
 
-// TODO Document this method
 // TODO Modify this to work with the cancelling function
 void challenge(String passcodeString) {
-    char passcode[6]; // Stores the 6-digit passcode to be matched by the customer
-    // Convert the passcode parameter 
-    for (int x = 0; x < 6; x++) {
-        passcode[x] = passcodeString.charAt(x);
-    }
 
-    boolean result = false;
-
-    for (int x = challengeAttempts; x > 0; x--) {
-        char input[6];
-        int storedInputs = 0;
-        unsigned long lastKeyPress;
-        boolean timedOut = false;
-
-        lcd.clear();
-        lcd.setCursor(2, 0);
-        lcd.print("PIN :");
-        lcd.setCursor(3, 1);
-        lcd.print("[#]DELETE");
-        lcd.setCursor(8, 0);
-
-        while (!timedOut) {
-            char key = keypad.getKey(); // Get key from keypad
-            // if a key is pressed
-            if (key) {
-                if (key == '#') {
-                    if (storedInputs > 0) {
-                        storedInputs--;
-                        lcd.setCursor(8, 0);
-                        lcd.print("      ");
-                        lcd.setCursor(8, 0);
-                        for (int y = 0; y < storedInputs; y++) {
-                            lcd.print("*");
-                        }
-                    }
-                    else {
-                        buzzerQuickError();
-                    }
-                }
-                else if (key == '*') {
-                    buzzerQuickError();
-                }
-                // if a number is pressed
-                else {
-                    lastKeyPress = millis();
-                    // if the number of stored inputs is not 6 yet
-                    if (storedInputs != 6) {
-                        input[storedInputs] = key;
-                        storedInputs++;
-                        lcd.print("*");
-                    }
-                    else {
-                        buzzerQuickError();
-                    }
-                }
-            }
-
-            // if there are 6 digits in input and 2 seconds have passed since the last keypress
-            if (storedInputs == 6 && (millis() - lastKeyPress) == 2000) {
-                timedOut = true;
-            }
-        }
-        
-        boolean match = true;
-        for (int y = 0; y < 6; y++) {
-            if (input[y] != passcode[y]) {
-                match = false;
-                break;
-            }
-        }
-
-        if (match) {
-            lcd.clear();
-            lcd.setCursor(2,0);
-            lcd.print("Verification");
-            lcd.setCursor(3,1);
-            lcd.print("Successful");
-            buzzerSuccess();
-            delay(1500);
-
-            result = true;
-            break;
-        }
-        else {
-            lcd.clear();
-            lcd.setCursor(2,0);
-            lcd.print("Invalid PIN");
-            lcd.setCursor(1,1);
-            lcd.print(x-1);
-            lcd.setCursor(3,1);
-            lcd.print("retries left");
-            buzzerError();
-            delay(1250);
-        }
-    }
-
-    if (result) {
-        send(1);
-    }
-    else {
-        send(0);
-    }
 }
 
 // Waits for a key on the keypad to be pressed before returning the pressed number
@@ -929,20 +827,6 @@ void buzzerSuccess() {
     tone(buzzer, 2000);
     delay(500);
     noTone(buzzer);
-}
-
-// TODO Remove this and its references
-// saves data before sending it to the Serial monitor in case it is requsted again
-void send(String data) {
-    Serial.println(data);
-    lastSentData = data;
-}
-
-// TODO Remove this and its references
-// saves data before sending it to the Serial monitor in case it is requsted again
-void send(int data) {
-    Serial.println(data);
-    lastSentData = data;
 }
 
 void sendByte(byte data) {

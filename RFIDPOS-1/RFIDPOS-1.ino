@@ -92,13 +92,16 @@ int newScan_scores[16]; // keeps track of how many times each unique ID has appe
 unsigned long newScan_lastScanTime = 0;
 
 // challenge() misc variables
+// TODO include these in the reset method
 boolean challenge_passcodeReceived = false;
 String challenge_passcode = "";
 boolean challenge_inputStreamActive = false;
 char challenge_inputCharacters[6];
 char challenge_inputCount = 0;
+boolean challenge_inputConfirmed = false;
 
-// keypad sounds
+// keypad
+unsigned long lastKeyPress;
 boolean enableKeypadSounds = true;
 unsigned long beepStart;
 int beepState = 0;
@@ -139,7 +142,7 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     9 - Scan Complete
     10 - Scan Failed
     11 - Fetching account information
-    12 - 
+    12 - PIN:
 */
 
 int operationState = 0; // keeps track of what operation is currently being performed
@@ -619,22 +622,49 @@ void challenge() {
             lastPrinted = 12;
         }
 
-        // Stops the keypad beep
-        if (enableKeypadSounds && beepState == 1 && (millis() - beepStart) > keypadBeepTime) {
-            beepState = 0;
-            noTone(buzzer);
-        }
+        keypadBeepStop(100);
 
-        char key = keypad.getKey();
-        // if a key is pressed
-        if (key) {
-            // Starts the keypad beep
-            if (beepState == 0 && enableKeypadSounds) {
-                beepState = 1;
-                tone(buzzer, 2000);
-                beepStart = millis();
+        if (!challenge_inputConfirmed) {
+            char key = keypad.getKey();
+            // if a key is pressed
+            if (key) {
+                lastKeyPress = millis();
+                // if a number key is pressed
+                if (key > 47 && key < 58) {
+                    if (challenge_inputCount < 6) {
+                        challenge_inputCharacters[challenge_inputCount] = key;
+                        challenge_inputCount++;
+                        lcd.write(42);
+                        keypadBeepStart(2000);
+                    }
+                    else {
+                        keypadBeepStart(500);
+                    }
+                }
+                // if '#' key is pressed
+                else if (key == 35) {
+                    if (challenge_inputCount > 0) {
+                        challenge_inputCount--;
+                        lcd.setCursor(7,0);
+                        for (int x = 0; x < 6; x++) {
+                            lcd.write(32);
+                        }
+                        lcd.setCursor(7,0);
+                        for (int x = 0; x < challenge_inputCount; x++) {
+                            lcd.write(42);
+                        }
+                        keypadBeepStart(2000);
+                    }
+                    else {
+                        keypadBeepStart(500);
+                    }
+                }
+
+                for (int x = 0; x < challenge_inputCount; x++) {
+                    Serial.print(challenge_inputCharacters[x]);
+                }
+                Serial.println();
             }
-
         }
     }
     // if the passcode is not available
@@ -767,5 +797,22 @@ void resetOperationState() {
 void printLastScannedID() {
     for (int x = 0; x < 4; x++) {
         Serial.write(lastScannedID[x]);
+    }
+}
+
+// Starts the keypad beep
+void keypadBeepStart(int frequency) {
+    if (beepState == 0 && enableKeypadSounds) {
+        beepState = 1;
+        tone(buzzer, frequency);
+        beepStart = millis();
+    }
+}
+
+void keypadBeepStop(int time) {
+    // Stops the keypad beep
+    if (enableKeypadSounds && beepState == 1 && (millis() - beepStart) > time) {
+        beepState = 0;
+        noTone(buzzer);
     }
 }

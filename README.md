@@ -12,9 +12,9 @@ RFID Card Reader device to complement POS Implementation in Java
 
 ## II. Functions
 ##### A. GENERAL
-- [ ] Cancel Operations
+- [x] Cancel Operations
 - [x] Change the first input of New Passcode
-- [ ] Cancel Input of Challenge
+- [x] Cancel Input of Challenge
 
 ##### B. RFID
 - [x] Test for RFID Scanner Status
@@ -24,9 +24,9 @@ RFID Card Reader device to complement POS Implementation in Java
 - [x] Make the device hold the scanned serial number until the Java program has requested it
 
 ##### C. GSM
-- [ ] Test for GSM Module Status
-- [ ] Ask for GSM Signal Strength
-- [ ] Send SMS
+- [x] Test for GSM Module Status
+- [x] Ask for GSM Signal Strength
+- [x] Send SMS
 
 ##### D. KEYPAD
 - [x] Input functionality

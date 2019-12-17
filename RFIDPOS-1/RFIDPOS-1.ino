@@ -411,7 +411,7 @@ void scan() {
             sendByte(TagSerialNumber[x]);
         }
         sendByte(179); // End the data stream
-        operationState = 0;
+        resetOperationState();
     }
 }
 

@@ -243,8 +243,6 @@ void loop() {
                 delay(1250);
                 lastPrinted = 3;
             }
-
-            sendByte(180); // Tells POS to reestablish a connection
         }
 
         // if byte 128 is received, set status as connected
@@ -259,8 +257,7 @@ void loop() {
             lastPrinted = 2;
             startingState = false;
             deviceConnected = true;
-            sendByte(130);
-            lastConnectivityCheck = millis();
+            sendByte(49);
         }
     }
 }
@@ -1053,7 +1050,7 @@ void updateOperationState() {
     case 141:
         operationState = 7; // Sets the current task to "newPINInput()"
         break;
-    case 141:
+    case 142:
         operationState = 8; // Sets the current task to "testConnection()"
         break;
     

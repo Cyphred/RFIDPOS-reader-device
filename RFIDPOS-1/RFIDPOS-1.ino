@@ -264,16 +264,6 @@ void loop() {
     }
 }
 
-// TODO Remove this
-// Waits for any data to arrive via serial and returns it as a String
-String waitForSerialInput() {
-    String input = "";
-    while (input.length() == 0) {
-        input = Serial.readStringUntil('\n');
-    }
-    return input;
-}
-
 // Checks if the RFID Module if connected
 boolean checkNFC()
 {
@@ -621,6 +611,7 @@ void resetNewScanVariables() {
     }
 }
 
+// Prompt user if the scan has failed
 void failedNewScan(int mode) {
     if (lastPrinted != 10) {
         lcd.clear();
@@ -637,6 +628,7 @@ void failedNewScan(int mode) {
     }
 }
 
+// Challenges the customer with a PIN retrieved from the database
 void challenge() {
     // if the passcode is available
     if (pin_passcodeReceived) {
@@ -1002,6 +994,12 @@ void newPIN() {
     }
 }
 
+// Tests the connection between the device and the POS
+void testConnection() {
+    Serial.print(1);
+    resetOperationState();
+}
+
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time
 void buzzerError()
 {
@@ -1021,11 +1019,13 @@ void buzzerSuccess() {
     noTone(buzzer);
 }
 
+// sends a byte to the Serial monitor
 void sendByte(byte data) {
     Serial.write(data);
     lastSentByte = data;
 }
 
+// updates the operation state to tell the arduino what function to perform
 void updateOperationState() {
     switch (lastReadByte) {
     case 131: // Cancels an operation
@@ -1069,14 +1069,9 @@ void updateOperationState() {
     }
 }
 
+// Resets the operation state to revert back to the splash screen
 void resetOperationState() {
     operationState = 0;
-}
-
-void printLastScannedID() {
-    for (int x = 0; x < 4; x++) {
-        Serial.write(lastScannedID[x]);
-    }
 }
 
 // Starts the keypad beep
@@ -1088,15 +1083,11 @@ void keypadBeepStart(int frequency) {
     }
 }
 
+// Stops the keypad beep
 void keypadBeepStop(int time) {
     // Stops the keypad beep
     if (enableKeypadSounds && beepState == 1 && (millis() - beepStart) > time) {
         beepState = 0;
         noTone(buzzer);
     }
-}
-
-void testConnection() {
-    Serial.print(1);
-    resetOperationState();
 }

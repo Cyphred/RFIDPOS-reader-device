@@ -110,6 +110,8 @@ int keypadBeepTime = 50;
 
 byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
 
+unsigned long timeoutStart;
+
 void setup()
 {
     SPI.begin();
@@ -262,6 +264,7 @@ void loop() {
     }
 }
 
+// TODO Remove this
 // Waits for any data to arrive via serial and returns it as a String
 String waitForSerialInput() {
     String input = "";
@@ -287,6 +290,8 @@ boolean checkGSM()
     int returnValue = 2;
     int readBytes = 0;
 
+    // Starts keeping track of time to wait for a response before timing out
+    timeoutStart = millis();
     while (returnValue == 2) {
         if (gsmSerial.available()) {
             byte readByte = gsmSerial.read();
@@ -299,6 +304,11 @@ boolean checkGSM()
                     returnValue = 0;
                 }
             }
+        }
+        // if timeout is exceeded, end command
+        else if ((millis() - timeoutStart) > 5000) {
+            timeoutStart = 0;
+            break;
         }
     }
 
@@ -440,12 +450,10 @@ void scan() {
         lastPrinted = 6;
         buzzerSuccess();
 
-        sendByte(178); // Start a data stream
         // Send 4 bytes representing the card's unique ID
         for (int x = 0; x < 4; x++) {
             sendByte(TagSerialNumber[x]);
         }
-        sendByte(179); // End the data stream
         resetOperationState();
     }
 }

@@ -91,7 +91,7 @@ int newScan_storedUniqueIDs = 0; // keeps track the actual number unique IDs sca
 int newScan_scores[16]; // keeps track of how many times each unique ID has appeared during the 16 passes of scanning
 unsigned long newScan_lastScanTime = 0;
 
-// challenge() and newPINInput() misc variables
+// challenge() and newPIN() misc variables
 boolean pin_passcodeReceived = false;
 String pin_passcode = "";
 boolean pin_inputStreamActive = false;
@@ -147,7 +147,7 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     11 - Fetching account information
     12 - PIN: (challenge)
     13 - Invalid PIN, X retries left
-    14 - PIN: (newPINInput)
+    14 - PIN: (newPIN)
     15 - CONFIRM:
     16 - PIN Confirmed
     17 - PIN does not match
@@ -208,7 +208,7 @@ void loop() {
             break;
 
         case 7:
-            newPINInput();
+            newPIN();
             break;
 
         case 8:
@@ -452,8 +452,10 @@ void scan() {
 
         // Send 4 bytes representing the card's unique ID
         for (int x = 0; x < 4; x++) {
-            sendByte(TagSerialNumber[x]);
+            lastScannedID[x] = TagSerialNumber[x];
         }
+
+        printLastScannedID();
         resetOperationState();
     }
 }
@@ -786,7 +788,7 @@ void challenge() {
     }
 }
 
-// Clears the variables associated with challenge() and newPINInput() so that it is reset and ready for another operation
+// Clears the variables associated with challenge() and newPIN() so that it is reset and ready for another operation
 void resetPINVariables() {
     pin_passcodeReceived = false;
     pin_passcode = "";
@@ -798,7 +800,7 @@ void resetPINVariables() {
 }
 
 // Asks user to input a new PIN twice, for confirmation
-void newPINInput() {
+void newPIN() {
     // Stops any keypad sounds
     keypadBeepStop(100);
 
@@ -1031,7 +1033,7 @@ void updateOperationState() {
         if (operationState == 2) {
             resetNewScanVariables();
         }
-        // If the cancelled operation is "challenge()" or "newPINInput()", resets the variables associated with it
+        // If the cancelled operation is "challenge()" or "newPIN()", resets the variables associated with it
         else if (operationState == 6 || operationState == 7) {
             resetPINVariables();
         }
@@ -1056,7 +1058,7 @@ void updateOperationState() {
         operationState = 6; // Sets the current task to "challenge()"
         break;
     case 141:
-        operationState = 7; // Sets the current task to "newPINInput()"
+        operationState = 7; // Sets the current task to "newPIN()"
         break;
     case 142:
         operationState = 8; // Sets the current task to "testConnection()"

@@ -109,6 +109,7 @@ int beepState = 0;
 int keypadBeepTime = 50;
 
 byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
+int gsmPower = A1;
 
 unsigned long timeoutStart;
 
@@ -117,7 +118,8 @@ void setup()
     SPI.begin();
     gsmSerial.begin(19200);
     Serial.begin(115200);
-    pinMode(buzzer, OUTPUT);
+    pinMode(buzzer,OUTPUT);
+    pinMode(gsmPower,OUTPUT);
 
     // Initialize LCD
     lcd.init();
@@ -127,6 +129,10 @@ void setup()
     // Initialize RFID Module
     nfc.begin();
     version = nfc.getFirmwareVersion();
+
+    digitalWrite(gsmPower,HIGH);
+    delay(2000);
+    digitalWrite(gsmPower,LOW);
     
     sendByte(128); // Signals the POS that the device is ready to initiate a connection
 }
@@ -1089,5 +1095,12 @@ void keypadBeepStop(int time) {
     if (enableKeypadSounds && beepState == 1 && (millis() - beepStart) > time) {
         beepState = 0;
         noTone(buzzer);
+    }
+}
+
+// Prints the last scanned ID
+void printLastScannedID() {
+    for (int x = 0; x < 4; x++) {
+        Serial.print(lastScannedID[x]);
     }
 }

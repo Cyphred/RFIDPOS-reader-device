@@ -21,13 +21,13 @@
   [Keypad] - https://github.com/Chris--A/Keypad
            - https://playground.arduino.cc/Code/Keypad/
     Note: To get the pinouts of the keypad, rotate it counter-clockwise, from top to bottom pins:
-    1 - ROW1 -> D0
-    2 - ROW2 -> A2
+    1 - ROW1 -> A2
+    2 - ROW2 -> A1
     3 - COL2 -> D2
     4 - ROW3 -> D3
     5 - COL0 -> D4
     6 - ROW0 -> D5
-    7 - COL1 -> D6
+    7 - COL1 -> A0
 
   [Buzzer]
     + -> A3
@@ -66,8 +66,8 @@ char keys[keypadRows][keypadCols] = {
   {'7','8','9'},
   {'*','0','#'}
 };
-byte rowPins[keypadRows] = {5,0,A2,3}; // Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
-byte colPins[keypadCols] = {4,6,2};  // Connect keypad COL0, COL1 and COL2 to these Arduino pins.
+byte rowPins[keypadRows] = {5,A2,A1,3}; // Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
+byte colPins[keypadCols] = {4,A0,2};  // Connect keypad COL0, COL1 and COL2 to these Arduino pins.
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCols); // Initializes the keypad. To get the char from the keypad, char key = keypad.getKey(); then if (key) to check for a valid key
 
 // LCD declarations
@@ -109,7 +109,7 @@ int beepState = 0;
 int keypadBeepTime = 50;
 
 byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
-int gsmPower = A1;
+int gsmPower = 6;
 
 unsigned long timeoutStart;
 
@@ -130,9 +130,7 @@ void setup()
     nfc.begin();
     version = nfc.getFirmwareVersion();
 
-    digitalWrite(gsmPower,HIGH);
-    delay(2000);
-    digitalWrite(gsmPower,LOW);
+    toggleGSMPower();
     
     sendByte(128); // Signals the POS that the device is ready to initiate a connection
 }
@@ -304,6 +302,7 @@ boolean checkGSM()
         // if timeout is exceeded, end command
         else if ((millis() - timeoutStart) > 5000) {
             timeoutStart = 0;
+            toggleGSMPower();
             break;
         }
     }
@@ -1101,6 +1100,12 @@ void keypadBeepStop(int time) {
 // Prints the last scanned ID
 void printLastScannedID() {
     for (int x = 0; x < 4; x++) {
-        Serial.print(lastScannedID[x]);
+        Serial.write(lastScannedID[x]);
     }
+}
+
+void toggleGSMPower() {
+    digitalWrite(gsmPower,HIGH);
+    delay(1500);
+    digitalWrite(gsmPower,LOW);
 }

@@ -156,6 +156,7 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     16 - PIN Confirmed
     17 - PIN does not match
     18 - 
+    19 - Sending SMS
 */
 
 int operationState = 0; // keeps track of what operation is currently being performed
@@ -345,6 +346,7 @@ void sendSMS() {
     lcd.clear();
     lcd.setCursor(2,0);
     lcd.print("Sending SMS");
+    lastPrinted = 19;
 
     String number = ""; // Variable to store the customer's phone number
     int readState = 0; // Variable to keep track of the waiting status for the customer's number to arrive over serial
@@ -360,7 +362,7 @@ void sendSMS() {
             }
             
             if (readState == 2) {
-                if (number.length() != 10) {
+                if (number.length() != 12) {
                     readState = 0;
                     number = "";
                     sendByte(137); // Tells the POS that the received data is incomplete, and asks to resend
@@ -389,7 +391,7 @@ void sendSMS() {
     // AT command to set gsmSerial to SMS mode
     gsmSerial.print("AT+CMGF=1\r"); 
     delay(100);
-    gsmSerial.println("AT + CMGS = \"" + number + "\""); 
+    gsmSerial.println("AT + CMGS = \"+" + number + "\""); 
     delay(100);
     gsmSerial.println(message); 
     delay(100);

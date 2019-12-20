@@ -75,6 +75,7 @@ LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LC
 
 // Buzzer declarations
 const int buzzer = A3;
+boolean muteBuzzer = true;
 
 // Runtime misc variables
 const int challengeAttempts = 3;
@@ -1010,20 +1011,24 @@ void testConnection() {
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time
 void buzzerError()
 {
-    tone(buzzer, 500);
-    delay(250);
-    noTone(buzzer);
-    delay(250);
-    tone(buzzer, 500);
-    delay(250);
-    noTone(buzzer);
+    if (!muteBuzzer) {
+        tone(buzzer, 500);
+        delay(250);
+        noTone(buzzer);
+        delay(250);
+        tone(buzzer, 500);
+        delay(250);
+        noTone(buzzer);
+    }
 }
 
 // Plays success tone for 500ms so I don't have to write these couple lines down every single time
 void buzzerSuccess() {
-    tone(buzzer, 2000);
-    delay(500);
-    noTone(buzzer);
+    if (!muteBuzzer) {
+        tone(buzzer, 2000);
+        delay(500);
+        noTone(buzzer);
+    }
 }
 
 // sends a byte to the Serial monitor
@@ -1083,7 +1088,7 @@ void resetOperationState() {
 
 // Starts the keypad beep
 void keypadBeepStart(int frequency) {
-    if (beepState == 0 && enableKeypadSounds) {
+    if (beepState == 0 && enableKeypadSounds && !muteBuzzer) {
         beepState = 1;
         tone(buzzer, frequency);
         beepStart = millis();

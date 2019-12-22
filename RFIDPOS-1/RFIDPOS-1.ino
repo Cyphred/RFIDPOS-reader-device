@@ -112,8 +112,6 @@ int keypadBeepTime = 50;
 byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
 int gsmPower = 6;
 
-unsigned long timeoutStart;
-
 void setup()
 {
     SPI.begin();
@@ -205,7 +203,12 @@ void loop() {
             break;
 
         case 5:
-            sendSMS();
+            if (sendSMS()) {
+                Serial.print(1);
+            }
+            else {
+                Serial.print(0);
+            }
             resetOperationState();
             break;
         
@@ -291,6 +294,7 @@ boolean checkGSM()
     gsmSerial.print("AT\r");
     int returnValue = 2;
     String temp = "";
+    unsigned long timeoutStart;
 
     // Starts keeping track of time to wait for a response before timing out
     timeoutStart = millis();
@@ -343,6 +347,7 @@ int checkSIM() {
             if (lastChar[0] == 'O') {
                 if (lastChar[1] == 'K' || lastChar[1] == 'R') {
                     responseReceived = true;
+                    break;
                 }
             }
         }
@@ -408,7 +413,7 @@ int getGSMSignal() {
 }
 
 // Sends an SMS with the GSM Module. Returns true if sending is successful
-void sendSMS() {
+boolean sendSMS() {
     lcd.clear();
     lcd.setCursor(2,0);
     lcd.print("Sending SMS");
@@ -454,17 +459,105 @@ void sendSMS() {
         }
     }
 
+    message += (char)26;
+
+    unsigned long timeoutStart;
+    String temp = "";
+    boolean smsAvailable = false;
+    boolean responseReceived = false;
+
     // AT command to set gsmSerial to SMS mode
-    gsmSerial.print("AT+CMGF=1\r"); 
-    delay(100);
-    gsmSerial.print("AT+CMGS=\"+" + number + "\"\r"); 
-    delay(100);
-    gsmSerial.print(message);
-    delay(100);
-    // End AT command with a ^Z, ASCII code 26
-    gsmSerial.println((char)26);
-    // Give module time to send SMS
-    delay(5000); 
+    gsmSerial.print("AT+CMGF=1\r");
+    timeoutStart = millis();
+    while ((millis() - timeoutStart) < 1000) {
+        if (gsmSerial.available()) {
+            byte readByte = gsmSerial.read();
+            if (readByte != 13 && readByte != 10) {
+                temp += (char)readByte;
+            }
+        }
+
+        if (temp.length() > 2) {
+            char lastChar[] = {temp.charAt(temp.length() - 2),temp.charAt(temp.length() - 1)};
+            if (lastChar[0] == 'O') {
+                if (lastChar[1] == 'K' || lastChar[1] == 'R') {
+                    responseReceived = true;
+                    break;
+                }
+            }
+        }
+    }
+    
+    if (responseReceived && temp.indexOf("OK") >= 0) {
+        smsAvailable = true;
+    }
+
+    if (smsAvailable) {
+        gsmSerial.print("AT+CMGS=\"+" + number + "\"\r"); 
+        
+        timeoutStart = millis();
+        temp = "";
+        responseReceived = false;
+
+        while (!responseReceived && (millis() - timeoutStart) < 100) {
+            if (gsmSerial.available()) {
+                byte readByte = gsmSerial.read();
+                if (readByte != 13 && readByte != 10) {
+                    temp += (char)readByte;
+                }
+            }
+
+            if (temp.length() > 2) {
+                char lastChar[] = {temp.charAt(temp.length() - 2),temp.charAt(temp.length() - 1)};
+                if (lastChar[0] == 'O') {
+                    if (lastChar[1] == 'K' || lastChar[1] == 'R') {
+                        responseReceived = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (responseReceived) {
+            if (temp.indexOf("ERROR") >= 0) {
+                smsAvailable = false;
+            }
+        }
+
+        if (smsAvailable) {
+            gsmSerial.print(message);
+
+            timeoutStart = millis();
+            temp = "";
+            responseReceived = false;
+
+            while (!responseReceived && (millis() - timeoutStart) < 5000) {
+                if (gsmSerial.available()) {
+                    byte readByte = gsmSerial.read();
+                    if (readByte != 13 && readByte != 10) {
+                        temp += (char)readByte;
+                    }
+                }
+
+                if (temp.length() > 2) {
+                    char lastChar[] = {temp.charAt(temp.length() - 2),temp.charAt(temp.length() - 1)};
+                    if (lastChar[0] == 'O') {
+                        if (lastChar[1] == 'K' || lastChar[1] == 'R') {
+                            responseReceived = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (responseReceived) {
+                if (temp.indexOf("OK") >= 0) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 // Checks if an RFID tag is scanned

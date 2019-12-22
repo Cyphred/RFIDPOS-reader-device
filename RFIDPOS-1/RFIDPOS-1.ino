@@ -221,6 +221,11 @@ void loop() {
             testConnection();
             break;
 
+        case 9:
+            Serial.print(checkSIM());
+            resetOperationState();
+            break;
+
         default:
             break;
         }
@@ -280,25 +285,20 @@ boolean checkNFC()
     return false;
 }
 
+// FIXME
 boolean checkGSM()
 {
-    gsmSerial.println("AT");
+    gsmSerial.print("AT\r");
     int returnValue = 2;
-    int readBytes = 0;
+    String temp = "";
 
     // Starts keeping track of time to wait for a response before timing out
     timeoutStart = millis();
     while (returnValue == 2) {
         if (gsmSerial.available()) {
             byte readByte = gsmSerial.read();
-            readBytes++;
-            if (readBytes > 6) {
-                if (readByte == 79) {
-                    returnValue = 1;
-                }
-                else {
-                    returnValue = 0;
-                }
+            if (readByte != 10 || readByte != 13) {
+                temp += (char)readByte;
             }
         }
         // if timeout is exceeded, end command
@@ -307,12 +307,57 @@ boolean checkGSM()
             toggleGSMPower();
             break;
         }
+
+        if (temp.indexOf("OK") >= 0) {
+            returnValue = 1;
+            break;
+        }
+        else if (temp.indexOf("ERROR") >= 0) {
+            returnValue = 0;
+            break;
+        }
     }
 
     if (returnValue == 1) {
         return true;
     }
     return false;
+}
+
+int checkSIM() {
+    gsmSerial.print("AT+CPIN?\r");
+    int returnValue = 2;
+    String temp = "";
+    unsigned long timeoutStart = millis();
+    boolean responseReceived = false;
+    while (!responseReceived && (millis() - timeoutStart) < 3000) {
+        if (gsmSerial.available()) {
+            byte readByte = gsmSerial.read();
+            if (readByte != 13 && readByte != 10) {
+                temp += (char)readByte;
+            }
+        }
+
+        if (temp.length() > 2) {
+            char lastChar[] = {temp.charAt(temp.length() - 2),temp.charAt(temp.length() - 1)};
+            if (lastChar[0] == 'O') {
+                if (lastChar[1] == 'K' || lastChar[1] == 'R') {
+                    responseReceived = true;
+                }
+            }
+        }
+    }
+
+    if (responseReceived) {
+        if (temp.indexOf("READY") >= 0) {
+            returnValue = 1;
+        }
+        else if (temp.indexOf("ERROR") >= 0) {
+            returnValue = 0;
+        }
+    }
+
+    return returnValue;
 }
 
 // Gets GSM Signal Quality
@@ -1092,6 +1137,9 @@ void updateOperationState() {
         break;
     case 142:
         operationState = 8; // Sets the current task to "testConnection()"
+        break;
+    case 143:
+        operationState = 9; // Sets the current task to "checkSIM()"
         break;
     
     default:

@@ -392,14 +392,12 @@ void sendSMS() {
     // AT command to set gsmSerial to SMS mode
     gsmSerial.print("AT+CMGF=1\r"); 
     delay(100);
-    gsmSerial.println("AT + CMGS = \"+" + number + "\""); 
+    gsmSerial.print("AT+CMGS=\"+" + number + "\"\r"); 
     delay(100);
-    gsmSerial.println(message); 
+    gsmSerial.print(message);
     delay(100);
     // End AT command with a ^Z, ASCII code 26
-    gsmSerial.println((char)26); 
-    delay(100);
-    gsmSerial.println();
+    gsmSerial.println((char)26);
     // Give module time to send SMS
     delay(5000); 
 }

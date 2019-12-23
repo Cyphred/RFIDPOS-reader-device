@@ -263,7 +263,7 @@ void loop() {
             break;
 
         case 11:
-            if (gsmReset()) {
+            if (gsmPowerOff()) {
                 Serial.print(1);
             }
             else {
@@ -599,16 +599,13 @@ boolean sendSMS() {
 }
 
 // Resets the GSM Module
-boolean gsmReset() {
+boolean gsmPowerOff() {
     int status = checkGSM();
     if (status == 1) {
         digitalWrite(gsmPower,HIGH);
         delay(1000);
         digitalWrite(gsmPower,LOW);
-
-        if (toggleGSMPower()) {
-            return true;
-        }
+        return true;
     }
     return false;
 }
@@ -1291,7 +1288,7 @@ void updateOperationState() {
         operationState = 10; // Sets the current task to "toggleGSMPower()"
         break;
     case 145:
-        operationState = 11; // Sets the current task to "gsmReset()"
+        operationState = 11; // Sets the current task to "gsmPowerOff()"
         break;
     
     default:

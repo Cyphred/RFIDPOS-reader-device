@@ -75,7 +75,7 @@ LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LC
 
 // Buzzer declarations
 const int buzzer = A3;
-boolean muteBuzzer = true;
+boolean muteBuzzer = false;
 
 // Runtime misc variables
 const int challengeAttempts = 3;
@@ -112,28 +112,6 @@ int keypadBeepTime = 50;
 byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
 int gsmPower = 6;
 
-void setup()
-{
-    SPI.begin();
-    gsmSerial.begin(19200);
-    Serial.begin(115200);
-    pinMode(buzzer,OUTPUT);
-    pinMode(gsmPower,OUTPUT);
-
-    // Initialize LCD
-    lcd.init();
-    lcd.backlight();
-    lcd.noCursor();
-
-    // Initialize RFID Module
-    nfc.begin();
-    version = nfc.getFirmwareVersion();
-
-    toggleGSMPower();
-    
-    sendByte(128); // Signals the POS that the device is ready to initiate a connection
-}
-
 int lastPrinted = 0; // An identifier for different LCD messages to prevent screen flickering
 /*
     [lastPrinted Guide]
@@ -156,7 +134,57 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     17 - PIN does not match
     18 - 
     19 - Sending SMS
+    20 - Powering on GSM
+    21 - GSM Powered On!
+    22 - GSM Failure!
+    23 - Powering on GSM
 */
+
+void setup()
+{
+    SPI.begin();
+    gsmSerial.begin(19200);
+    Serial.begin(115200);
+    pinMode(buzzer,OUTPUT);
+    pinMode(gsmPower,OUTPUT);
+
+    // Initialize LCD
+    lcd.init();
+    lcd.backlight();
+    lcd.noCursor();
+
+    // Initialize RFID Module
+    nfc.begin();
+    version = nfc.getFirmwareVersion();
+
+    lcd.clear();
+    lcd.setCursor(1,0);
+    lcd.print("Please wait...");
+    lcd.setCursor(0,1);
+    lcd.print("Powering on GSM");
+    lastPrinted = 23;
+
+    if (toggleGSMPower()) {
+        if (lastPrinted != 21) {
+            lcd.clear();
+            lcd.setCursor(0,0);
+            lcd.print("GSM Powered On!");
+            lastPrinted = 21;
+            delay(1000);
+        }
+    }
+    else {
+        if (lastPrinted != 22) {
+            lcd.clear();
+            lcd.setCursor(2,0);
+            lcd.print("GSM Failure!");
+            lastPrinted = 22;
+            delay(1000);
+        }
+    }
+    
+    sendByte(128); // Signals the POS that the device is ready to initiate a connection
+}
 
 int operationState = 0; // keeps track of what operation is currently being performed
 byte lastReadByte;
@@ -188,12 +216,7 @@ void loop() {
             break;
 
         case 3:
-            if (checkGSM()) {
-                Serial.print(1);
-            }
-            else {
-                Serial.print(0);
-            }
+            Serial.print(checkGSM());
             resetOperationState();
             break;
 
@@ -226,6 +249,26 @@ void loop() {
 
         case 9:
             Serial.print(checkSIM());
+            resetOperationState();
+            break;
+
+        case 10:
+            if (toggleGSMPower()) {
+                Serial.print(1);
+            }
+            else {
+                Serial.print(0);
+            }
+            resetOperationState();
+            break;
+
+        case 11:
+            if (gsmReset()) {
+                Serial.print(1);
+            }
+            else {
+                Serial.print(0);
+            }
             resetOperationState();
             break;
 
@@ -288,28 +331,26 @@ boolean checkNFC()
     return false;
 }
 
-// FIXME
-boolean checkGSM()
+
+int checkGSM()
 {
+    // Sends AT command to check GSM status
     gsmSerial.print("AT\r");
+    // by default, return value will be '2' for timed out
     int returnValue = 2;
+    // temp to temporarily store the bytes received as responses from the gsm module
     String temp = "";
+    // The start of timeouts
     unsigned long timeoutStart;
 
     // Starts keeping track of time to wait for a response before timing out
     timeoutStart = millis();
-    while (returnValue == 2) {
+    while (returnValue == 2 && (millis() - timeoutStart) < 5000) {
         if (gsmSerial.available()) {
             byte readByte = gsmSerial.read();
             if (readByte != 10 || readByte != 13) {
                 temp += (char)readByte;
             }
-        }
-        // if timeout is exceeded, end command
-        else if ((millis() - timeoutStart) > 5000) {
-            timeoutStart = 0;
-            toggleGSMPower();
-            break;
         }
 
         if (temp.indexOf("OK") >= 0) {
@@ -322,10 +363,7 @@ boolean checkGSM()
         }
     }
 
-    if (returnValue == 1) {
-        return true;
-    }
-    return false;
+    return returnValue;
 }
 
 int checkSIM() {
@@ -555,6 +593,21 @@ boolean sendSMS() {
                     return true;
                 }
             }
+        }
+    }
+    return false;
+}
+
+// Resets the GSM Module
+boolean gsmReset() {
+    int status = checkGSM();
+    if (status == 1) {
+        digitalWrite(gsmPower,HIGH);
+        delay(1000);
+        digitalWrite(gsmPower,LOW);
+
+        if (toggleGSMPower()) {
+            return true;
         }
     }
     return false;
@@ -1234,6 +1287,12 @@ void updateOperationState() {
     case 143:
         operationState = 9; // Sets the current task to "checkSIM()"
         break;
+    case 144:
+        operationState = 10; // Sets the current task to "toggleGSMPower()"
+        break;
+    case 145:
+        operationState = 11; // Sets the current task to "gsmReset()"
+        break;
     
     default:
         break;
@@ -1270,8 +1329,30 @@ void printLastScannedID() {
     }
 }
 
-void toggleGSMPower() {
-    digitalWrite(gsmPower,HIGH);
-    delay(1500);
-    digitalWrite(gsmPower,LOW);
+boolean toggleGSMPower() {
+    //Serial.println("[toggleGSMPower()] checking gsm status..."); // TEMP
+    int result = checkGSM();
+    if (result == 0 || result == 2) {
+        //Serial.println("[toggleGSMPower()] gsm is off. Powering on..."); // TEMP
+        digitalWrite(gsmPower,HIGH);
+        delay(1500);
+        digitalWrite(gsmPower,LOW);
+        //Serial.println("[toggleGSMPower()] checking gsm status..."); // TEMP
+
+        result = 0;
+        while (result < 2) {
+            if (checkGSM() == 1) {
+                //Serial.println("[toggleGSMPower()] gsm is now on."); // TEMP
+                return true;
+            }
+            result++;
+        }
+    }
+    else if (result == 1) {
+        //Serial.println("[toggleGSMPower()] gsm is already on. Doing nothing..."); // TEMP
+        return true;
+    }
+    //Serial.println("[toggleGSMPower()] could not power on gsm"); // TEMP
+    return false;
+    
 }

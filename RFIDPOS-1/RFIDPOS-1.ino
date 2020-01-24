@@ -483,22 +483,6 @@ boolean sendSMS() {
         }
     }
 
-    String message = "";
-    readState = 0;
-    while (readState != 2) {
-        byte readByte = Serial.read();
-        if (readByte != 255) {
-            if (readByte == 2 || readByte == 3) {
-                readState++;
-            }
-            else if (readState == 1) {
-                message += (char)readByte;
-            }
-        }
-    }
-
-    message += (char)26;
-
     unsigned long timeoutStart;
     String temp = "";
     boolean smsAvailable = false;
@@ -563,7 +547,20 @@ boolean sendSMS() {
         }
 
         if (smsAvailable) {
-            gsmSerial.print(message);
+            readState = 0;
+            while (readState != 2) {
+                byte readByte = Serial.read();
+                if (readByte != 255) {
+                    if (readByte == 2 || readByte == 3) {
+                        readState++;
+                    }
+                    else if (readState == 1) {
+                        gsmSerial.write(readByte);
+                    }
+                }
+            }
+
+            gsmSerial.write((byte)26);
 
             timeoutStart = millis();
             temp = "";

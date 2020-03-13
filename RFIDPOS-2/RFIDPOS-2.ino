@@ -35,13 +35,30 @@ Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCol
 // LCD variables and declarations
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LCD Library
 int lastPrintedMenu = 0; // An identifier for different LCD messages to prevent screen flickering
+boolean backlightOn;
 
 // Buzzer declarations
-const int buzzer = A3;
+const int buzzerPin = A3;
 boolean muteBuzzer = false;
 
 void setup() {
+    Serial.begin(115200); // Initialize hardware serial communication with 
+    gsmSerial.begin(19200); // Initialize software serial communication with the GSM module
 
+    pinMode(buzzerPin,OUTPUT); // Set the pin of the buzzer as a digital output
+    pinMode(gsmPowerPin,OUTPUT); // Set the pin for the GSM power switch as a digital output
+
+    // LCD
+    lcd.init(); // Initialization
+    lcd.backLight(); // Enable the backlight
+    backlightOn = true; // Set the backlight's status to ON
+    lcd.noCursor(); // Hides the LCD cursor
+
+    // RFID Reader
+    nfc.begin(); // Initialization
+    version = nfc.getFirmwareVersion(); // Fetch the scanner's version to see connection with the module has been established
+
+    Serial.write(128); // Signals the POS that the device is ready to initiate a connection
 }
 
 void loop() {

@@ -1,11 +1,26 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <SoftwareSerial.h>
+#include <EEPROM.h>
+#include <TimeLib.h>
 
 SoftwareSerial gsmSerial(8,7);
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LCD Library
 
+uint32_t purchaseAmount_whole;
+uint32_t purchaseAmount_decimal;
+uint32_t availableBalance_whole;
+uint32_t availableBalance_decimal;
+uint32_t transactionID;
+uint32_t purchaseUnixtime;
+
 String gsmSerialTemp = "";
+
+/*
+    NOTES
+    - Addresses 0 to 23 are reserved for the store name
+
+*/
 
 void setup() {
     Serial.begin(9600);
@@ -23,20 +38,39 @@ void setup() {
     else {
         lcd.print("GSM not ready");
     }
+    delay(2000);
 }
 
-void loop() {
-    byte readByte;
-    if (Serial.available()) {
-        readByte = Serial.read();
+byte namePrint = 0;
 
-        if (readByte == 136) {
-            if (checkSMS()) {
-                Serial.print(1);
-                streamSMSContent();
-            }
-            else {
-                Serial.print(0);
+void loop() {
+    while (Serial.available()) {
+        byte readByte = Serial.read();
+
+        if (readByte != 255 && readByte != 13 && readByte != 10) {
+            switch (readByte) {
+                case 147:
+                    setStoreName();
+                    namePrint = 0;
+                    break;
+                case 148:
+                    setPurchaseUnixTime();
+                    break;
+                case 149:
+                    setSMSTemplate();
+                    break;
+                case 150:
+                    setPurchaseAmount();
+                    break;
+                case 151:
+                    setAvailableBalance();
+                    break;
+                case 152:
+                    setTransactionID();
+                    break;
+                case 64:
+                    parseSMSTemplate();
+                    break;
             }
         }
     }
@@ -76,178 +110,260 @@ int checkGSM() {
     return returnValue;
 }
 
-boolean checkSMS() {
-    unsigned long timeoutStart; // Will keep track of when the timer started
-
-    gsmSerial.print("AT+CMGF=1\r"); // AT command to set gsmSerial to SMS mode
-    boolean responseReceived = false;
-
-    // waits 1 second for a response before timing out
-    timeoutStart = millis();
-    while ((millis() - timeoutStart) < 1000) {
-        if (gsmSerial.available()) {
-            byte readByte = gsmSerial.read();
-            if (readByte != 13 && readByte != 10) {
-                gsmSerialTemp += (char)readByte;
-            }
-        }
-
-        if (gsmSerialTemp.length() > 2) {
-            char lastChar[] = {gsmSerialTemp.charAt(gsmSerialTemp.length() - 2),gsmSerialTemp.charAt(gsmSerialTemp.length() - 1)};
-            if (lastChar[0] == 'O') {
-                if (lastChar[1] == 'K' || lastChar[1] == 'R') {
-                    responseReceived = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    // if the response is received and it contains "OK"
-    if (responseReceived && gsmSerialTemp.indexOf("OK") >= 0) {
-        return true;
-    }
-
-    return false;
+// Changes the stored store name
+void setStoreName() {
+    writeSerialDataToEEPROM(0);
 }
 
-byte streamSMSContent() {
-    lcd.clear(); // TEMP
-    lcd.print("Sending SMS to");
-    lcd.setCursor(0,1);
-    lcd.print('+');
-    // With a timeout, wait for Serial data to arrive and immediately push said data to the GSM Module
-    unsigned long timeoutStart; // Will keep track of timeout points
-    byte streamStatus = 0; // Will keep track of the byte Stream's status
-    boolean timedOut = true;
+// Queries the length of the store's name
+int getStoreNameLength() {
+    int length = 0; // Keeps track of the counted bytes in the allocated space for the store's name
 
-    gsmSerial.print("AT+CMGS=\"+");
+    // Iterate 24 times MAX
+    for (int x = 0; x < 24; x++) {
+        byte readByte = EEPROM.read(x); // Read the current EEPROM address
+        
+        // If the store name end marker is reached (a forward slash) end the loop
+        if (readByte == 3) {
+            break;
+        }
+        // If the end marker is not reached yet, increment the length
+        else {
+            length++;
+        }
+    }
 
-    // Timeout after 1 second
-    while ((millis() - timeoutStart) < 1000) {
-        if (Serial.available()) {
-            byte readByte = Serial.read();
+    return length;
+}
 
-            // If the byte stream for receiving the number is inactive, and the stream start marker has been receiced,
-            // set the stream status to "running"
-            if (streamStatus == 0 && readByte == 2) {
-                streamStatus = 1;
+// Catches a byte stream containing a double value
+/* Possible parameters
+    0 - Purchase Amount
+    1 - Available Balance
+*/
+double catchDouble(int targetVariable) {
+    uint32_t wholeNumber = 0;
+    uint32_t decimal = 0;
+    boolean periodReceived = false;
+    boolean endMarkerReceived = false;
+
+    // Wait for the end marker to arrive before proceeding
+    while (!endMarkerReceived) {
+        // While there is data coming in from the Serial monitor
+        while(Serial.available()) {
+            byte readByte = Serial.read(); // Read arriving Serial data
+            // If an end marker is received
+            if (readByte == 3) {
+                endMarkerReceived = true;
+                break;
             }
-            // If the byte stream for receiving the number is active...
-            else if (streamStatus == 1) {
-                // And the end stream marker is received
-                if (readByte == 3) {
-                    timedOut = false; // Indicate that the loop did not time out
-                    break; // End the current loop
+            // If the read byte is a period
+            else if (readByte == 46) {
+                periodReceived = true;
+            }
+            // If the read byte is a valid digit
+            else if (readByte > 47 && readByte < 58) {
+                // If a period hasn't been received yet, incoming values are to be added to
+                // the "whole number" variable
+                if (!periodReceived) {
+                    // Multiply the whole number by 10 to accomodate the adding of another digit
+                    wholeNumber = (wholeNumber * 10) + (readByte - 48);
                 }
+                // If a period has already been received, incoming values are to be added to
+                // the "decimal" variable
                 else {
-                    lcd.write(readByte); // TEMP
-                    gsmSerial.write(readByte);
+                    // Multiply the decimal by 10 to accomodate the adding of another digit
+                    decimal = (decimal * 10) + (readByte - 48);
                 }
             }
         }
     }
 
-    gsmSerial.print('"');
-    gsmSerialTemp = ""; // Clear the temp GSM Serial data variable
+    switch (targetVariable) {
+        case 0:
+            purchaseAmount_whole = wholeNumber;
+            purchaseAmount_decimal = decimal;
+            break;
+        case 1:
+            availableBalance_whole = wholeNumber;
+            availableBalance_decimal = decimal;
+            break;
+    }
+}
 
-    delay(100);
+// Catches a byte stream containing a long value
+uint32_t catchLong() {
+    uint32_t returnValue = 0;
+    boolean endMarkerReceived = false;
 
-    while(gsmSerial.available()) {
-        gsmSerialTemp += (char)gsmSerial.read();
+    // Wait for the end marker to arrive before proceeding
+    while (!endMarkerReceived) {
+        // While there is data coming in from the Serial monitor
+        while(Serial.available()) {
+            byte readByte = Serial.read(); // Read arriving Serial data
+            // If an end marker is received
+            if (readByte == 3) {
+                endMarkerReceived = true;
+                break;
+            }
+            // If the read byte is a digit
+            else {
+                returnValue *= 10;
+                returnValue += (readByte - 48);
+            }
+        }
     }
 
-    // If the angle bracket indicator that the SMS data receiving is ready, proceed
-    if (gsmSerialTemp.indexOf(">") >= 0) {
-        // TEMP
-        lcd.clear();
-        lcd.print("Waiting for message");
+    return returnValue;
+}
+
+// Saves an SMS template to the EEPROM
+// This will have fields that will be parsed and included in the SMS
+void setSMSTemplate() {
+    // Keeps track of what EEPROM address to write to
+    // Starts with address 25 to accomodate for the 24-character store name (address 0-23)
+    // and the end marker which will be at address 24 if the store name reaches the 24-character limit
+    writeSerialDataToEEPROM(25);
+}
+
+void writeSerialDataToEEPROM(int startAddress) {
+    // Keeps track of what EEPROM address to write to
+    int writeToAddress = startAddress;
+    boolean endMarkerReceived = false;
+
+    // Wait for the end marker to arrive before proceeding
+    while (!endMarkerReceived) {
+        // While there is data coming in from the Serial monitor
+        while(Serial.available()) {
+            byte readByte = Serial.read(); // Read arriving Serial data
+            // If an end marker is received
+            if (readByte == 3) {
+                smartEEPROMWrite(writeToAddress,3); // Write a END TEXT marker
+                endMarkerReceived = true;
+                break;
+            }
+            // If the read byte is part of the data to be stored
+            else {
+                smartEEPROMWrite(writeToAddress,readByte); // Write the arriving byte into storage
+                writeToAddress++; // Increment target EEPROM address to write to
+            }
+        }
     }
+}
+
+// Checks the current adress if it has the same value as the candidate byte to reduce the need
+// to overwrite an address with the same data
+boolean smartEEPROMWrite(int address, byte input) {
+    // Check if the candidate byte is different from the currently held byte
+    if (EEPROM.read(address) != input) {
+        EEPROM.write(address, input); // Write the candidate byte to the selected address to overwrite the old data
+        return true; // Indicate that data has been overwritten
+    }
+    // If the candidate byte is the same with the currently held byte
     else {
-        lcd.clear();
-        lcd.print("SMS Error");
-        lcd.setCursor(0,1);
-        lcd.print("No message");
-        return 2;
+        return false; // Indicate that no writing has been done
     }
+}
 
-    // End the method the previous stream timed out
-    if (timedOut) {
-        lcd.clear();
-        lcd.print("SMS Error");
-        lcd.setCursor(0,1);
-        lcd.print("Timed out");
-        return 2;
-    }
+// Parse SMS template and pass it to GSM module
+void parseSMSTemplate() {
+    // Prints date and time
+    char dateBuffer[32];
+    // Parse unixtime into readable date
+    sprintf(
+        dateBuffer,"%02d-%02d-%02d %02d:%02d:%02d",
+        year(purchaseUnixtime),
+        month(purchaseUnixtime),
+        day(purchaseUnixtime),
+        hour(purchaseUnixtime),
+        minute(purchaseUnixtime),
+        second(purchaseUnixtime)
+    );
+    gsmSerial.println(dateBuffer); // Print the date and time to the SMS
 
-    // Prepare variables for next byte stream
-    timeoutStart = millis();
-    streamStatus = 0;
-    timedOut = true;
+    byte readByte, nextByte; // Stores the currently read bytes
+    boolean ignoreNextByte = false; // Will keep track if the next read byte is supposed to be ignored
+    int readPosition = 25; // The starting position to read from the EEPROM
+    // Will iterate until the maximum size of the EEPROM available on the Arduino UNO
+    while (readPosition < 512) {
+        readByte = EEPROM.read(readPosition); // Read the byte at the current address
 
-    // Timeout after 5 seconds
-    while ((millis() - timeoutStart) < 5000) {
-        if (Serial.available()) {
-            byte readByte = Serial.read();
-
-            // If the byte stream for receiving the number is inactive, and the stream start marker has been receiced,
-            // set the stream status to "running"
-            if (streamStatus == 0 && readByte == 2) {
-                streamStatus = 1;
-            }
-            // If the byte stream for receiving the number is active...
-            else if (streamStatus == 1) {
-                // And the end stream marker is received
-                if (readByte == 3) {
-                    timedOut = false; // Indicate that the loop did not time out
-                    break; // End the current loop
-                }
-                else {
-                    gsmSerial.write(readByte);
-                }
-            }
-        }
-    }
-
-    gsmSerial.write(26);
-    streamStatus = 0; // Re-purpose variable to indicate if a reply from the module has been received
-    gsmSerialTemp = "";
-
-    lcd.clear();
-    lcd.print("Sending SMS");
-
-    while (true) {
-        if (gsmSerial.available()) {
-            byte readByte = gsmSerial.read();
-            if (readByte != 13 && readByte != 10) {
-                gsmSerialTemp += (char)readByte;
-            }
+        // Only attempt to read the next byte when the currently selected address is not the last one
+        if (readPosition < 511) {
+            nextByte = EEPROM.read(readPosition + 1);
         }
 
-        if (gsmSerialTemp.length() > 2) {
-            char lastChar[] = {gsmSerialTemp.charAt(gsmSerialTemp.length() - 2),gsmSerialTemp.charAt(gsmSerialTemp.length() - 1)};
-            if (lastChar[0] == 'O') {
-                if (lastChar[1] == 'K' || lastChar[1] == 'R') {
-                    break;
+        readPosition++; // Increment read position to move onto the next address after this iteration
+
+        // If the current byte is NOT supposed to be ignored
+        if (!ignoreNextByte) {
+            // If the end marker has been reached, break out of the while loop
+            if (readByte == 3) {
+                break;
+            }
+            // If a STX marker is encountered, this marks a field with a corresponding code
+            else if (readByte == 2) {
+                ignoreNextByte = true; // The next byte should be ignored because it is a character that represents the field's code
+                switch (nextByte) {
+                    // Purchase Amount (Total)
+                    case 65:
+                        gsmSerial.print(purchaseAmount_whole);
+                        gsmSerial.print('.');
+                        gsmSerial.print(purchaseAmount_decimal);
+                        break;
+
+                    // Store Name
+                    case 66:
+                        for (int x = 0; x < 24; x++) {
+                            byte readName = EEPROM.read(x);
+                            if (readName == 3) {
+                                break;
+                            }
+                            else {
+                                gsmSerial.write(readName);
+                            }
+                        }
+                        break;
+
+                    // Available Balance
+                    case 67:
+                        gsmSerial.print(availableBalance_whole);
+                        gsmSerial.print('.');
+                        gsmSerial.print(availableBalance_decimal);
+                        break;
+
+                    // Transaction ID
+                    case 68:
+                        gsmSerial.print(transactionID);
+                        break;
                 }
             }
+            // If a regular character is received, send it to the GSM
+            else {
+                gsmSerial.write(readByte);
+            }
+        }
+        // If the current byte is supposed to be ignored
+        else {
+            ignoreNextByte = false; // Set ignoreNextByte to false so that the next byte will not be ignored
         }
     }
+}
 
-    if (gsmSerialTemp.indexOf("ERROR") >= 0) {
-        lcd.clear();
-        lcd.print("SMS Sent");
-        return 0;
-    }
-    else if (gsmSerialTemp.indexOf("OK") >= 0) {
-        lcd.clear();
-        lcd.print("SMS not sent");
-        return 1;
-    }
+// Sets the unix time of the last purchase
+// This will be parsed and included in the SMS
+void setPurchaseUnixTime() {
+    purchaseUnixtime = catchLong();
+}
 
-    lcd.clear();
-    lcd.print("SMS error");
-    lcd.setCursor(0,1);
-    lcd.print("Generic");
-    return 2;
+void setPurchaseAmount() {
+    catchDouble(0);
+}
+
+void setAvailableBalance() {
+    catchDouble(1);
+}
+
+void setTransactionID() {
+    transactionID = catchLong();
 }

@@ -48,7 +48,7 @@
 #include <SoftwareSerial.h>    // Library for Software Serial communication between the Arduino and the GSM Module
 
 // GSM Module declarations
-SoftwareSerial gsmSerial(7,8);
+SoftwareSerial gsmSerial(8,7);
 
 // RFID Reader declarations
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
@@ -133,11 +133,15 @@ int lastPrinted = 0; // An identifier for different LCD messages to prevent scre
     16 - PIN Confirmed
     17 - PIN does not match
     18 - 
-    19 - Sending SMS
+    19 - Initiating SMS Sending
     20 - Powering on GSM
     21 - GSM Powered On!
     22 - GSM Failure!
     23 - Powering on GSM
+    24 - SMS Sent
+    25 - SMS Sending Failed
+    26 - SMS Intialize Failed
+    27 - Sending SMS
 */
 
 void setup()
@@ -226,12 +230,15 @@ void loop() {
             break;
 
         case 5:
-            if (sendSMS()) {
+            sendSMS();
+            /*
+            if (initiateSMS()) {
                 Serial.print(1);
             }
             else {
                 Serial.print(0);
             }
+            */
             resetOperationState();
             break;
         
@@ -264,6 +271,16 @@ void loop() {
 
         case 11:
             if (gsmPowerOff()) {
+                Serial.print(1);
+            }
+            else {
+                Serial.print(0);
+            }
+            resetOperationState();
+            break;
+
+        case 12:
+            if (sendSMSContent()) {
                 Serial.print(1);
             }
             else {
@@ -1286,6 +1303,10 @@ void updateOperationState() {
         break;
     case 145:
         operationState = 11; // Sets the current task to "gsmPowerOff()"
+        break;
+
+    case 146:
+        operationState = 12; // Sets the current task to "sendSMSContent()"
         break;
     
     default:

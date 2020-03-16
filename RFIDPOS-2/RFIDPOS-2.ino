@@ -17,7 +17,6 @@ byte bufferEnding[2] = {0,0}; // Will hold the last 3 bytes of a byte stream com
 #define SDAPIN 10  // RFID Module SDA Pin connected to digital pin
 #define RESETPIN 9 // RFID Module RESET Pin connected to digital pin
 MFRC522 nfc(SDAPIN, RESETPIN); // Initialization for RFID Reader with declared pinouts for SDA and RESET
-byte version; // Variable to store Firmware version of the RFID Module
 byte lastScannedID[4]; // Stores the unique ID of the last scanned RFID Tag
 
 // Keypad declarations and declarations
@@ -34,7 +33,6 @@ byte rowPins[keypadRows] = {5,A2,A1,3}; // Connect keypad ROW0, ROW1, ROW2 and R
 byte colPins[keypadCols] = {4,A0,2};  // Connect keypad COL0, COL1 and COL2 to these Arduino pins.
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, keypadRows, keypadCols); // Initializes the keypad. To get the char from the keypad, char key = keypad.getKey(); then if (key) to check for a valid key
 
-
 // LCD variables and declarations
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2); // Initialization for LCD Library
 int lastPrintedMenu = 0; // An identifier for different LCD messages to prevent screen flickering
@@ -45,10 +43,12 @@ const int buzzerPin = A3;
 boolean muteBuzzer = false;
 
 // Menu operation variables
-byte menuID = 0;
+byte menuID = 1;
 byte lastMenuID = 0;
 
 // Misc declarations
+byte arrivingByte; // Stores the arriving byte each iteration of the loop
+boolean newByte; // Keeps track if the last arriving byte has not been interpreted yet
 boolean deviceConnected; // Keeps track if
 uint32_t timeoutStart; // Global variable for storing the start of timeouts
 
@@ -64,9 +64,6 @@ uint32_t purchaseUnixtime;
 uint32_t lastStep; // The last millis() time that the text was scrolled
 byte welcomeMessage[11] = {87,101,108,99,111,109,101,32,116,111,32}; // The message to be attached to the store name ("Welcome to ")
 int currentIndex = 0; // The current starting index to print the message on
-// Keeps track of the length of the slash text.
-//Don't forget to add the length of the store name here in setup
-byte splashTextLength = 11;
 uint32_t scrollSpeed = 500; // The time intervals in ms between each scroll step
 
 void setup() {
@@ -75,8 +72,6 @@ void setup() {
 
     pinMode(buzzerPin,OUTPUT); // Set the pin of the buzzer as a digital output
     pinMode(gsmPowerPin,OUTPUT); // Set the pin for the GSM power switch as a digital output
-
-    splashTextLength += getStoreNameLength(); // Get the legth of the store name and add it to the total length of the splash text
 
     // LCD
     lcd.init(); // Initialization
@@ -92,14 +87,7 @@ void setup() {
     lcd.setCursor(0,1);
     lcd.print("RFID Reader");
     SPI.begin(); // Begin SPI communication
-    nfc.begin(); // Initialization 
-    version = nfc.getFirmwareVersion(); // Fetch the scanner's version to see connection with the module has been established
-    // If the RFID module version cannot be fetched, this means a proper connection cannot be established with the module
-    if (!version) {
-        clearLCDRow(1);
-        lcd.print("RFID Error");
-        buzzerError();
-    }
+    nfc.PCD_Init(); // Initialize the MFRC522
 
     // GSM Module
     clearLCDRow(1);
@@ -153,11 +141,28 @@ void setup() {
 }
 
 void loop() {
-    menuID = Serial.read();
+    // If a byte has arrived via serial
+    if (Serial.available()) {
+        arrivingByte = Serial.read();
+        newByte = true;
+    }
+
+    // Interpret the arrived byte to see if it is a general command byte
+    // First, check if the arrived byte has not been read yet to avoid a repeat read
+    // If the arrived byte is interpreted in the switch statement, set its state to already read
+    if (newByte) {
+        switch (arrivingByte) {
+            case 132:
+                menuID = 2; // Scan an RFID tag
+                newByte = false;
+                break;
+        }
+    }
+
     // Shows the splash screen
-    if (menuID == 255) {
+    if (menuID == 1) {
         // Check if the last menu ID was not the splash screen
-        if (lastMenuID != 255) {
+        if (lastMenuID != 1) {
             lcd.clear();
             lcd.setCursor(16,0);
             // Write the welcome message template
@@ -179,9 +184,49 @@ void loop() {
             lastStep = millis();
             lcd.scrollDisplayLeft();
         }
-
-        lastMenuID = 255;
     }
+    // Scan an RFID tag
+    else if (menuID == 2) {
+        RFIDRead();
+    }
+
+    lastMenuID = menuID; // Save the current menu ID to be remembered as the last menu ID
+    menuID = 1; // Set the next menu ID to the splash screen
+}
+
+void RFIDRead() {
+    lcd.clear();
+    lcd.print("Place your card");
+    lcd.setCursor(0,1);
+    lcd.print("near the scanner");
+
+    // Indefinite loop while waiting for a card to be scanned
+    while (true) {
+        byte readByte = Serial.read(); // Read serial data
+        if (readByte == 131) { // Cancels the operation
+            break; // Break out of the indefinite loop
+        }
+        // TODO also add a call for device status and gsm status here
+
+        // If a card has been detected and read
+        if (nfc.PICC_IsNewCardPresent() && nfc.PICC_ReadCardSerial()) {
+            // Send tag data via Serial with start and end markers
+            Serial.write(2);
+            nfc.PICC_DumpUIDToSerial(&(nfc.uid));
+            Serial.write(3);
+            
+            // Prompt the user that a card has been scanned
+            lcd.clear();
+            lcd.setCursor(2,0);
+            lcd.print("Card Scanned");
+            buzzerSuccess();
+            delay(1500);
+
+            break; // Break out of the indefinite loop
+        }
+    }
+
+    lcd.clear(); // Clear the LCD before finishing
 }
 
 // Checks the GSM module's status
@@ -365,6 +410,10 @@ void parseSMSTemplate() {
                     case 65:
                         gsmSerial.print(purchaseAmount_whole);
                         gsmSerial.print('.');
+                        // Prints the a zero before the actual decimal if it is smaller than 10
+                        if (purchaseAmount_decimal < 10) {
+                            gsmSerial.print('0');
+                        }
                         gsmSerial.print(purchaseAmount_decimal);
                         break;
 
@@ -385,6 +434,10 @@ void parseSMSTemplate() {
                     case 67:
                         gsmSerial.print(availableBalance_whole);
                         gsmSerial.print('.');
+                        // Prints a zero beforet he actual decimal if it is smaller than 10
+                        if (availableBalance_decimal < 10) {
+                            gsmSerial.print('0');
+                        }
                         gsmSerial.print(availableBalance_decimal);
                         break;
 

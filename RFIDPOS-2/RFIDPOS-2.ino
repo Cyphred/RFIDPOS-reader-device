@@ -40,7 +40,7 @@ boolean backlightOn;
 
 // Buzzer declarations
 const int buzzerPin = A3;
-boolean muteBuzzer = false;
+boolean muteBuzzer = true;
 
 // Menu operation variables
 byte menuID = 1;
@@ -51,14 +51,6 @@ byte arrivingByte; // Stores the arriving byte each iteration of the loop
 boolean newByte; // Keeps track if the last arriving byte has not been interpreted yet
 boolean deviceConnected; // Keeps track if
 uint32_t timeoutStart; // Global variable for storing the start of timeouts
-
-// SMS fields
-uint32_t purchaseAmount_whole;
-uint32_t purchaseAmount_decimal;
-uint32_t availableBalance_whole;
-uint32_t availableBalance_decimal;
-uint32_t transactionID;
-uint32_t purchaseUnixtime;
 
 // Splash screen scrolling
 uint32_t lastStep; // The last millis() time that the text was scrolled
@@ -102,6 +94,7 @@ void setup() {
             lcd.print("GSM Error");
             gsmReady = false;
             buzzerError();
+            delay(1250);
         }
         // If the GSM module has responded
         else {
@@ -157,6 +150,11 @@ void loop() {
                 newByte = false;
                 break;
 
+            case 133:
+                printStoreName();
+                newByte = false;
+                break;
+
             case 134: // Check GSM status
                 Serial.write(3);
                 Serial.print(checkGSM());
@@ -170,6 +168,11 @@ void loop() {
 
             case 139: // Challenge
                 menuID = 3;
+                newByte = false;
+                break;
+
+            case 141: // Create new PIN
+                menuID = 4;
                 newByte = false;
                 break;
         }
@@ -209,6 +212,10 @@ void loop() {
     else if (menuID == 3) {
         PINChallenge();
     }
+    // Create new PIN
+    else if (menuID == 4) {
+        PINCreate();
+    }
 
     lastMenuID = menuID; // Save the current menu ID to be remembered as the last menu ID
     menuID = 1; // Set the next menu ID to the splash screen
@@ -247,198 +254,6 @@ void RFIDRead() {
     }
 
     lcd.clear(); // Clear the LCD before finishing
-}
-
-// Checks the GSM module's status
-// returns an integer with a corresponding state
-// 0 = Error
-// 1 = Ok
-// 2 = Timeout - This means the GSM module did not respond within the allocated time
-// It also updates gsmReady with true or false, depending on the result every time it is called
-int checkGSM() {
-    gsmSerial.print("AT\r"); // Sends AT command to check GSM status
-    timeoutStart = millis(); // Mark the start of the timeout
-    resetBufferEnding(); // Clear the current contents of the buffer ending
-    
-    // Wait for 100ms before timing out
-    while((millis() - timeoutStart) < 100) {
-        while (gsmSerial.available()) {
-            addByteToBufferEnding(gsmSerial.read());
-        }
-
-        // If the buffer ending of "OK" or "ERROR" has been received
-        if (bufferEnding[0] == 'O' && (bufferEnding[1] == 'K' || bufferEnding[1] == 'R')) {
-            break;
-        }
-    }
-
-    if (bufferEnding[0] == 0) {
-        gsmReady = false;
-        return 2;
-    }
-    else if (bufferEnding[1] == 'K') {
-        gsmReady = true;
-        return 1;
-    }
-    else if (bufferEnding[1] == 'R') {
-        gsmReady = false;
-        return 0;
-    }
-}
-
-// TODO Queries for the signal quality of the SIM in db
-int getGSMSignalQuality() {
-    gsmSerial.print("AT+CSQ\r"); // AT command for checking GSM signal quality
-}
-
-void PINChallenge() {
-    lcd.clear();
-    lcd.setCursor(2,0);
-    lcd.print("Fetching PIN");
-    lcd.setCursor(2,1);
-    lcd.print("from database");
-
-    char targetPIN[6]; // Will store the correct PIN
-    byte PINCharactersReceived = 0; // Keeps track of the number of digits received as the target PIN
-
-    // Infinite loop to wait for the operation to complete or be cancelled
-    while (true) {
-        byte readByte = Serial.read(); // Read serial data
-        // Cancels the operation
-        if (readByte == 131) {
-            break;
-        }
-        // The end marker for the PIN
-        else if (readByte == 3) {
-            break;
-        }
-        // If the received byte is a digit, and the number of stored digits have not been satisfied yet
-        else if (readByte > 47 && readByte < 58 && PINCharactersReceived < 6) {
-            targetPIN[PINCharactersReceived] = readByte; // Add the digit to the target PIN
-            PINCharactersReceived++; // Increment the counter for the received digits
-        }
-        // TODO also add a call for device status and gsm status here
-    }
-
-    byte attemptsLeft = 3; // Keeps track of the attempts left
-
-    // Only runs if the number of target PIN characters has been satisfied
-    // Otherwise, assumes that the operation has been cancelled
-    if (PINCharactersReceived == 6) {
-        // Another infinite loop that will only end when it is cancelled, failed or completed
-        while (true) {
-            char inputDigits[6]; // Will hold the entered digits from the keypad
-            byte cursorPosition = 0; // Will keep track of the current position of the "cursor"
-
-            // Prompts the user to enter their PIN
-            lcd.clear();
-            lcd.setCursor(2,0);
-            lcd.print("PIN:");
-            lcd.setCursor(0,1);
-            lcd.print("[*]OK  [#]DELETE");
-            lcd.setCursor(7,0);
-
-            // Another infinite inner loop that will catch the user's inputs
-            while (true) {
-                byte readByte = Serial.read(); // Reads the serial in case a cancel byte or status inquiry is issued
-                if (readByte == 131) {
-                    return; // Cancels the method
-                }
-                else {
-                    // TODO Add status inquries here
-                }
-
-                char readKey = keypad.getKey(); // Grab data from keypad
-                // If the keypad was pressed
-                if (readKey) {
-                    // If the pressed key is a digit
-                    if (readKey > 47 && readKey < 58) {
-                        // If there are already 6 digits entered
-                        if (cursorPosition < 6) {
-                            lcd.print('*');
-                            inputDigits[cursorPosition] = readKey;
-                            cursorPosition++;
-                        }
-                    }
-                    // If the pound key is pressed (Delete Key)
-                    else if (readKey == '#') {
-                        // Check if the current cursor position is not at zero
-                        if (cursorPosition > 0) {
-                            lcd.setCursor((6 + cursorPosition),0);
-                            lcd.write(32); // Overwrite with space
-                            lcd.setCursor((6 + cursorPosition),0);
-                            cursorPosition--;
-                        }
-                    }
-                    // If the asterisk key is pressed (OK Key)
-                    else if (readKey == '*') {
-                        // Check if there are already 6 digits entered
-                        if (cursorPosition == 6) {
-                            boolean validPIN = true;
-                            // Check every digit in the input and the target PINs to see if there is a mismatch
-                            for (int x = 0; x < 6; x++) {
-                                // If a mistmatch is found
-                                if (inputDigits[x] != targetPIN[x]) {
-                                    validPIN = false;
-                                    break;
-                                }
-                            }
-
-                            // If no mismatches were found
-                            if (validPIN) {
-                                // Prompt PIN match
-                                lcd.clear();
-                                lcd.setCursor(2,0);
-                                lcd.print("Verification");
-                                lcd.setCursor(4,1);
-                                lcd.print("Success");
-                                buzzerSuccess();
-                                delay(1500);
-
-                                Serial.print(1); // Tell the POS that verification was a Success
-                                lcd.clear(); // Clear the LCD before finishing
-                                return; // Ends the method
-                            }
-                            // If a mismatch is found
-                            else {
-                                attemptsLeft--; // Deduct the number of attempts left
-                                // Prompt PIN mismatch
-                                lcd.clear();
-                                lcd.setCursor(2,0);
-                                lcd.print("Invalid PIN");
-                                lcd.setCursor(1,1);
-                                lcd.print(attemptsLeft);
-                                lcd.setCursor(3,1);
-                                lcd.print("retries left");
-                                buzzerError();
-                                delay(1250);
-
-                                // If there are no more attempts left
-                                if (attemptsLeft == 0) {
-                                    Serial.print(0);
-                                    lcd.clear(); // Clear the LCD before finishing
-                                    return; // Ends the method
-                                }
-
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    lcd.clear(); // Clear the LCD before finishing
-}
-
-// Saves an SMS template to the EEPROM
-// This will have fields that will be parsed and included in the SMS
-void setSMSTemplate() {
-    // Keeps track of what EEPROM address to write to
-    // Starts with address 25 to accomodate for the 24-character store name (address 0-23)
-    // and the end marker which will be at address 24 if the store name reaches the 24-character limit
-    writeSerialDataToEEPROM(25);
 }
 
 void writeSerialDataToEEPROM(int startAddress) {
@@ -511,215 +326,17 @@ void buzzerSuccess() {
     }
 }
 
-// Adds a byte to the 2-byte buffer ending
-void addByteToBufferEnding(byte input) {
-    if (input != 10 && input != 13) {
-        bufferEnding[0] = bufferEnding[1];
-        bufferEnding[1] = input;
-    }
-}
-
-// Resets the buffer ending with byte 0
-void resetBufferEnding() {
-    bufferEnding[0] = 0;
-    bufferEnding[1] = 0;
-}
-
-// Toggles the power switch of the GSM module
-void toggleGSMPower() {
-    digitalWrite(gsmPowerPin,HIGH);
-    delay(1000);
-    digitalWrite(gsmPowerPin,LOW);
-}
-
-// Parse SMS template and pass it to GSM module
-void parseSMSTemplate() {
-    // Prints date and time
-    char dateBuffer[32];
-    // Parse unixtime into readable date
-    sprintf(
-        dateBuffer,"%02d-%02d-%02d %02d:%02d:%02d",
-        year(purchaseUnixtime),
-        month(purchaseUnixtime),
-        day(purchaseUnixtime),
-        hour(purchaseUnixtime),
-        minute(purchaseUnixtime),
-        second(purchaseUnixtime)
-    );
-    gsmSerial.println(dateBuffer); // Print the date and time to the SMS
-
-    byte readByte, nextByte; // Stores the currently read bytes
-    boolean ignoreNextByte = false; // Will keep track if the next read byte is supposed to be ignored
-    int readPosition = 25; // The starting position to read from the EEPROM
-    // Will iterate until the maximum size of the EEPROM available on the Arduino UNO
-    while (readPosition < 512) {
-        readByte = EEPROM.read(readPosition); // Read the byte at the current address
-
-        // Only attempt to read the next byte when the currently selected address is not the last one
-        if (readPosition < 511) {
-            nextByte = EEPROM.read(readPosition + 1);
-        }
-
-        readPosition++; // Increment read position to move onto the next address after this iteration
-
-        // If the current byte is NOT supposed to be ignored
-        if (!ignoreNextByte) {
-            // If the end marker has been reached, break out of the while loop
-            if (readByte == 3) {
-                break;
-            }
-            // If a STX marker is encountered, this marks a field with a corresponding code
-            else if (readByte == 2) {
-                ignoreNextByte = true; // The next byte should be ignored because it is a character that represents the field's code
-                switch (nextByte) {
-                    // Purchase Amount (Total)
-                    case 65:
-                        gsmSerial.print(purchaseAmount_whole);
-                        gsmSerial.print('.');
-                        // Prints the a zero before the actual decimal if it is smaller than 10
-                        if (purchaseAmount_decimal < 10) {
-                            gsmSerial.print('0');
-                        }
-                        gsmSerial.print(purchaseAmount_decimal);
-                        break;
-
-                    // Store Name
-                    case 66:
-                        for (int x = 0; x < 24; x++) {
-                            byte readName = EEPROM.read(x);
-                            if (readName == 3) {
-                                break;
-                            }
-                            else {
-                                gsmSerial.write(readName);
-                            }
-                        }
-                        break;
-
-                    // Available Balance
-                    case 67:
-                        gsmSerial.print(availableBalance_whole);
-                        gsmSerial.print('.');
-                        // Prints a zero beforet he actual decimal if it is smaller than 10
-                        if (availableBalance_decimal < 10) {
-                            gsmSerial.print('0');
-                        }
-                        gsmSerial.print(availableBalance_decimal);
-                        break;
-
-                    // Transaction ID
-                    case 68:
-                        gsmSerial.print(transactionID);
-                        break;
-                }
-            }
-            // If a regular character is received, send it to the GSM
-            else {
-                gsmSerial.write(readByte);
-            }
-        }
-        // If the current byte is supposed to be ignored
-        else {
-            ignoreNextByte = false; // Set ignoreNextByte to false so that the next byte will not be ignored
-        }
-    }
-}
-
-// Sets the unix time of the last purchase
-// This will be parsed and included in the SMS
-void setPurchaseUnixTime() {
-    purchaseUnixtime = catchLong();
-}
-
-void setPurchaseAmount() {
-    catchDouble(0);
-}
-
-void setAvailableBalance() {
-    catchDouble(1);
-}
-
-void setTransactionID() {
-    transactionID = catchLong();
-}
-
-// Catches a byte stream containing a double value
-/* Possible parameters
-    0 - Purchase Amount
-    1 - Available Balance
-*/
-double catchDouble(int targetVariable) {
-    uint32_t wholeNumber = 0;
-    uint32_t decimal = 0;
-    boolean periodReceived = false;
-    boolean endMarkerReceived = false;
-
-    // Wait for the end marker to arrive before proceeding
-    while (!endMarkerReceived) {
-        // While there is data coming in from the Serial monitor
-        while(Serial.available()) {
-            byte readByte = Serial.read(); // Read arriving Serial data
-            // If an end marker is received
-            if (readByte == 3) {
-                endMarkerReceived = true;
-                break;
-            }
-            // If the read byte is a period
-            else if (readByte == 46) {
-                periodReceived = true;
-            }
-            // If the read byte is a valid digit
-            else if (readByte > 47 && readByte < 58) {
-                // If a period hasn't been received yet, incoming values are to be added to
-                // the "whole number" variable
-                if (!periodReceived) {
-                    // Multiply the whole number by 10 to accomodate the adding of another digit
-                    wholeNumber = (wholeNumber * 10) + (readByte - 48);
-                }
-                // If a period has already been received, incoming values are to be added to
-                // the "decimal" variable
-                else {
-                    // Multiply the decimal by 10 to accomodate the adding of another digit
-                    decimal = (decimal * 10) + (readByte - 48);
-                }
-            }
-        }
-    }
-
-    switch (targetVariable) {
-        case 0:
-            purchaseAmount_whole = wholeNumber;
-            purchaseAmount_decimal = decimal;
+// Prints the store name
+void printStoreName() {
+    Serial.write(2);
+    for (int x = 0; x < 24; x++) {
+        byte readByte = EEPROM.read(x);
+        // If the end marker is found
+        if (readByte == 3) {
             break;
-        case 1:
-            availableBalance_whole = wholeNumber;
-            availableBalance_decimal = decimal;
-            break;
-    }
-}
-
-// Catches a byte stream containing a long value
-uint32_t catchLong() {
-    uint32_t returnValue = 0;
-    boolean endMarkerReceived = false;
-
-    // Wait for the end marker to arrive before proceeding
-    while (!endMarkerReceived) {
-        // While there is data coming in from the Serial monitor
-        while(Serial.available()) {
-            byte readByte = Serial.read(); // Read arriving Serial data
-            // If an end marker is received
-            if (readByte == 3) {
-                endMarkerReceived = true;
-                break;
-            }
-            // If the read byte is a digit
-            else {
-                returnValue *= 10;
-                returnValue += (readByte - 48);
-            }
         }
-    }
 
-    return returnValue;
+        Serial.write(readByte);
+    }
+    Serial.write(3);
 }

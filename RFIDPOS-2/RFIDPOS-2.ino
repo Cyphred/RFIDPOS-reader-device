@@ -166,6 +166,11 @@ void loop() {
 
                 break;
 
+            case 136: // Set store name
+                menuID = 5;
+                newByte = false;
+                break;
+
             case 139: // Challenge
                 menuID = 3;
                 newByte = false;
@@ -183,13 +188,14 @@ void loop() {
         // Check if the last menu ID was not the splash screen
         if (lastMenuID != 1) {
             lcd.clear();
-            lcd.setCursor(16,0);
+            lcd.setCursor(0,0);
             // Write the welcome message template
             for (int x = 0; x < 11; x++) {
                 lcd.write(welcomeMessage[x]);
             }
 
             // Write the store name
+            //lcd.setCursor(0,1);
             for (int x = 0; x < 25; x++) {
                 if (EEPROM.read(x) == 3) {
                     break;
@@ -215,6 +221,10 @@ void loop() {
     // Create new PIN
     else if (menuID == 4) {
         PINCreate();
+    }
+    // Set store name
+    else if (menuID == 5) {
+        setStoreName();
     }
 
     lastMenuID = menuID; // Save the current menu ID to be remembered as the last menu ID
@@ -326,6 +336,7 @@ void buzzerSuccess() {
     }
 }
 
+// TODO Make the POS verify with the device what name should it use
 // Prints the store name
 void printStoreName() {
     Serial.write(2);
@@ -339,4 +350,9 @@ void printStoreName() {
         Serial.write(readByte);
     }
     Serial.write(3);
+}
+
+// Changes the stored store name
+void setStoreName() {
+    writeSerialDataToEEPROM(0);
 }

@@ -10,7 +10,7 @@
 // GSM Module variables and declarations
 SoftwareSerial gsmSerial(8,7); // Create SoftwareSerial object
 int gsmPowerPin = 6; // Digital pin connected to the GSM module's power toggle switch
-boolean gsmReady; // Keeps track if the GSM module was active the last time it was checked
+boolean gsmReady = false; // Keeps track if the GSM module was active the last time it was checked
 byte bufferEnding[2] = {0,0}; // Will hold the last 3 bytes of a byte stream coming in through the software serial
 
 // RFID reader variables and declarations
@@ -40,7 +40,7 @@ boolean backlightOn;
 
 // Buzzer declarations
 const int buzzerPin = A3;
-boolean muteBuzzer = true;
+boolean muteBuzzer = false;
 
 // Menu operation variables
 byte menuID = 1;
@@ -85,20 +85,26 @@ void setup() {
     clearLCDRow(1);
     lcd.print("GSM Module");
     // Check the GSM module first to see if it is not turned on yet
-    if (checkGSM() != 1) {
+    if (!checkGSM(100)) {
         toggleGSMPower(); // Turn on GSM module
-         delay(3000); // Give the GSM module time to initialize
+
+        // Query GSM until it responds with OK
+        timeoutStart = millis();
+        while ((millis() - timeoutStart) < 3000) {
+            if (checkGSM(100)) {
+                gsmReady = true;
+                break;
+            }
+        }
+
+        //delay(3000); // Give the GSM module time to initialize
         // If the GSM module still won't respond
-        if (checkGSM() != 1) {
+        if (!gsmReady) {
             clearLCDRow(1);
             lcd.print("GSM Error");
             gsmReady = false;
             buzzerError();
             delay(1250);
-        }
-        // If the GSM module has responded
-        else {
-            gsmReady = true;
         }
     }
     // If the GSM module is already turned on
@@ -156,9 +162,7 @@ void loop() {
                 break;
 
             case 134: // Check GSM status
-                Serial.write(3);
-                Serial.print(checkGSM());
-                Serial.write(3);
+                Serial.print(checkGSM(100));
                 newByte = false;
                 break;
 
@@ -171,8 +175,23 @@ void loop() {
                 newByte = false;
                 break;
 
+            case 137: // Toggle GSM power
+                toggleGSMPower();
+                newByte = false;
+                break;
+
+            case 138: // AT Debug Mode
+                menuID = 6;
+                newByte = false;
+                break;
+
             case 139: // Challenge
                 menuID = 3;
+                newByte = false;
+                break;
+
+            case 140: // SMS Mode
+                Serial.print(SMSSend());
                 newByte = false;
                 break;
 
@@ -180,6 +199,8 @@ void loop() {
                 menuID = 4;
                 newByte = false;
                 break;
+
+            
         }
     }
 
@@ -225,6 +246,10 @@ void loop() {
     // Set store name
     else if (menuID == 5) {
         setStoreName();
+    }
+    // AT Debug Mode
+    else if (menuID == 6) {
+        ATDebugMode();
     }
 
     lastMenuID = menuID; // Save the current menu ID to be remembered as the last menu ID

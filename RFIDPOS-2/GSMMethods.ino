@@ -3,6 +3,11 @@
  * Will contain all GSM-related methods and variables
  */
 
+byte ATCommandCharacterSendingInterval = 10;
+void wait() {
+    delay(ATCommandCharacterSendingInterval);
+}
+
 // Toggles the power switch of the GSM module
 void toggleGSMPower() {
     digitalWrite(gsmPowerPin,HIGH);
@@ -13,7 +18,7 @@ void toggleGSMPower() {
 // Checks the GSM module's status
 // Prints an integer with a corresponding state
 boolean checkGSM(int timeoutDuration) {
-    gsmSerial.print("AT\r"); // Sends AT command to check GSM status
+    sendATCommand("AT",1); // Sends AT command to check GSM status
     timeoutStart = millis(); // Mark the start of the timeout
     resetBufferEnding(); // Clear the current contents of the buffer ending
     
@@ -34,7 +39,7 @@ boolean checkGSM(int timeoutDuration) {
 
 // Checks if the SIM card is detected
 boolean checkSIM() {
-    gsmSerial.print("AT+CPIN?\r");
+    sendATCommand("AT+CPIN?",1);
     String temp = "";
     timeoutStart = millis();
     boolean responseReceived = false;
@@ -66,9 +71,173 @@ boolean checkSIM() {
     return false;
 }
 
+boolean sendSMS() {
+    // The SMS-sending routine will be broken up into several stages which I will label
+    lcd.clear();
+    lcd.setCursor(1,0);
+    lcd.print("Sending SMS...");
+    lcd.setCursor(0,1);
+    lcd.print("Enabling SMS");
+
+    // Stage 1
+    // Set the GSM module to SMS sending mode
+    sendATCommand("AT+CMGF=1",1);
+
+    timeoutStart = millis(); // Mark the start of the timeout
+    resetBufferEnding(); // Clear the current contents of the buffer ending
+    boolean readyState = false; // Multipurpose variable to indicate the success of a step
+
+    // Wait for 100ms before timing out
+    while ((millis() - timeoutStart) < 1000) {
+        while (gsmSerial.available()) {
+            addByteToBufferEnding(gsmSerial.read());
+
+            // If the response is 'OK'
+            if (bufferEnding[0] == 'O' && bufferEnding[1] == 'K') {
+                flushGSMSerial();
+                readyState = true;
+                break;
+            }
+            // If the response is 'ERROR'
+            else if (bufferEnding[0] == 'O' && bufferEnding[1] == 'R') {
+                flushGSMSerial();
+                // TEMP
+                lcd.clear();
+                lcd.print("SMS Mode Fail");
+                break;
+            }
+        }
+
+    }
+
+    // Stage 2
+    // Set the mobile number of the recipient
+    if (readyState) {
+        readyState = false;
+        clearLCDRow(1);
+        lcd.print("Query recipient");
+        sendATCommand("AT+CMGS=\"+",0);
+        Serial.write(17); // Queries the POS for the recipient's number
+
+        byte readByte;
+        // Wait for the entire phone number to arrive
+        while (true) {
+            readByte = Serial.read();
+            
+            // If the read byte is a valid digit
+            if (readByte > 47 && readByte < 58) {
+                gsmSerial.write(readByte); // Send the digit to the GSM module
+                wait();
+            }
+            // If the read byte is the end marker
+            else if (readByte == 3) {
+                break;
+            }
+        }
+        sendATCommand("\"",1);
+
+        // Wait for the message line marker to be sent
+        timeoutStart = millis(); // Mark the start of the timeout
+        resetBufferEnding(); // Clear the current contents of the buffer ending
+
+        // Wait 100 ms before timing out
+        while ((millis() - timeoutStart) < 100) {
+            while(gsmSerial.available()) {
+                addByteToBufferEnding(gsmSerial.read());
+                // If the response is 'ERROR'
+                if (bufferEnding[0] == 'O' && bufferEnding[1] == 'R') {
+                    flushGSMSerial();
+                    readyState = false;
+                    // TEMP
+                    lcd.clear();
+                    lcd.print("SMS Number Fail");
+                    break;
+                }
+                // If the response is the line marker
+                else if (bufferEnding[1] == '>') {
+                    flushGSMSerial();
+                    readyState = true;
+                    break;
+                }
+            }
+
+        }
+
+    }
+
+    // Stage 3
+    // Send the message data to the GSM module
+    if (readyState) {
+        readyState = false;
+        byte readByte;
+        clearLCDRow(1);
+        lcd.print("Sending");
+
+        // Keep iterating until the end marker has been received
+        while (true) {
+            readByte = Serial.read();
+            
+            // If the end marker is received
+            if (readByte == 3) {
+                break; // End the loop
+            }
+            // If any other character is received
+            else {
+                gsmSerial.write(readByte);
+                wait();
+                flushGSMSerial();
+                break;
+            }
+        }
+
+        gsmSerial.write(26);
+        wait();
+
+        // Wait for the GSM module to reply
+        resetBufferEnding();
+        while (true) {
+            while(gsmSerial.available()) {
+                addByteToBufferEnding(gsmSerial.read());
+
+                // If the response includes an 'OK'
+                if (bufferEnding[0] == 'O' && bufferEnding[1] == 'K') {
+                    flushGSMSerial();
+                    lcd.clear();
+                    lcd.setCursor(4,0);
+                    lcd.print("SMS Sent");
+                    Serial.print(1); // tell the POS that sending is a success
+                    buzzerSuccess();
+                    delay(1500);
+                    return true;
+                }
+                // If the response is 'ERROR'
+                else if (bufferEnding[0] == 'O' && bufferEnding[1] == 'R') {
+                    flushGSMSerial();
+                    lcd.clear();
+                    lcd.setCursor(2,0);
+                    lcd.print("SMS not sent");
+                    Serial.print(0); // tell the POS that sending failed
+                    buzzerError();
+                    delay(1250);
+                    return false;
+                }
+            }
+
+        }
+    }
+
+    // If one step fails, it will automatically skip all the stages and fail
+    lcd.clear();
+    lcd.print("SMS Error");
+    Serial.print(2); // tell the POS that there was an error
+    buzzerError();
+    delay(1250);
+    return false;
+}
+
 // Gets GSM Signal Quality
 int getGSMSignalQuality() {
-    gsmSerial.print("AT+CSQ\r");
+    sendATCommand("AT+CSQ\r",1);
     int returnValue = -1;
     String temp = "";
     boolean responseReceived = false;
@@ -156,5 +325,16 @@ void ATCommandMode() {
 void flushGSMSerial() {
     while (gsmSerial.available()) {
         gsmSerial.read();
+    }
+}
+
+void sendATCommand(String command, byte sendCarriageReturn) {
+    for (int x = 0; x < command.length(); x++) {
+        gsmSerial.print(command.charAt(x));
+        wait();
+    }
+
+    if (sendCarriageReturn == 1) {
+        gsmSerial.write(13); // Sends a carriage return
     }
 }

@@ -48,12 +48,12 @@ byte lastMenuID = 0;
 // Misc declarations
 byte arrivingByte; // Stores the arriving byte each iteration of the loop
 boolean newByte; // Keeps track if the last arriving byte has not been interpreted yet
-boolean deviceConnected; // Keeps track if
 uint32_t timeoutStart; // Global variable for storing the start of timeouts
 
 // Splash screen scrolling
 uint32_t lastStep; // The last millis() time that the text was scrolled
 byte splashText[2][40]; // Will store the two-row splash screen messages
+byte splashTextLength[2] = {0,0}; // Will keep track of the length of the splash text lines
 int currentIndex = 0; // The current starting index to print the message on
 uint32_t scrollSpeed = 500; // The time intervals in ms between each scroll step
 
@@ -118,6 +118,8 @@ void setup() {
     lcd.setCursor(0,1);
     lcd.print("connection");
 
+    Serial.write(5); // Sends the signal asking for a reply to the POS
+
     // Wait for the splash screen text to arrive
     // Iterate twice for each row of splash screen text
     for (int x = 0; x < 2; x++) {
@@ -140,10 +142,9 @@ void setup() {
                 break; // end the loop
             }
         }
+        splashTextLength[x]  = splashTextCharactersReceived;
     }
 
-
-    deviceConnected = true;
     lcd.clear();
     lcd.setCursor(0,0);
     lcd.print("Connection");
@@ -184,7 +185,7 @@ void loop() {
                 newByte = false;
                 break;
 
-            case 136: // Set store name
+            case 136: // Send SMS
                 menuID = 5;
                 newByte = false;
                 break;
@@ -232,7 +233,7 @@ void loop() {
                 lcd.setCursor(0,x);
 
                 // Write the store name
-                for (int y = 0; y < 32; y++) {
+                for (int y = 0; y < 40; y++) {
                     if (splashText[x][y] == 3) {
                         break;
                     }
@@ -241,10 +242,13 @@ void loop() {
             }
         }
         
-        // Check if it is time to scroll the splash text
-        if ((millis() - lastStep) >= scrollSpeed) {
-            lastStep = millis();
-            lcd.scrollDisplayLeft();
+        // Check if the splash screen needs to be scrolled
+        if (splashTextLength[0] > 16 || splashTextLength[1] > 16) {
+            // Check if it is time to scroll the splash text
+            if ((millis() - lastStep) >= scrollSpeed) {
+                lastStep = millis();
+                lcd.scrollDisplayLeft();
+            }
         }
     }
     // Scan an RFID tag
@@ -258,6 +262,10 @@ void loop() {
     // Create new PIN
     else if (menuID == 4) {
         PINCreate();
+    }
+    // Send an SMS
+    else if (menuID == 5) {
+        sendSMS();
     }
     // AT Command Mode
     else if (menuID == 6) {

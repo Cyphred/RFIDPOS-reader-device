@@ -1,7 +1,6 @@
 #include <Wire.h>                   // for I2C communication with the LCD
 #include <LiquidCrystal_I2C.h>      // main library for the LCD functionality
 #include <SoftwareSerial.h>         // software Serial for communication with the GSM Module
-#include <EEPROM.h>                 // for allowing read/write operations to the EEPROM of the Arduino UNO
 #include <TimeLib.h>                // for time conversion functionality
 #include <SPI.h>                    // for SPI communication with the RFID scanner
 #include <MFRC522.h>                // main library for RFID scanner functionality
@@ -54,7 +53,7 @@ uint32_t timeoutStart; // Global variable for storing the start of timeouts
 
 // Splash screen scrolling
 uint32_t lastStep; // The last millis() time that the text was scrolled
-byte welcomeMessage[11] = {87,101,108,99,111,109,101,32,116,111,32}; // The message to be attached to the store name ("Welcome to ")
+byte splashText[2][40]; // Will store the two-row splash screen messages
 int currentIndex = 0; // The current starting index to print the message on
 uint32_t scrollSpeed = 500; // The time intervals in ms between each scroll step
 
@@ -118,14 +117,31 @@ void setup() {
     lcd.print("Waiting for");
     lcd.setCursor(0,1);
     lcd.print("connection");
-    
-    Serial.write(5); // Communicate with the POS that the device is ready to initiate a connection
-    // Wait for the handshake byte to be received
-    while (true) {
-        if (Serial.read() == 6) {
-            break;
+
+    // Wait for the splash screen text to arrive
+    // Iterate twice for each row of splash screen text
+    for (int x = 0; x < 2; x++) {
+        // Wait for the splash screen text data to arrive
+        // NOTE Splash screen can only be a maximum of 40 characters per line
+        byte splashTextCharactersReceived = 0;
+        while (true) {
+            byte readByte = Serial.read();
+
+            if (readByte == 3) { // If the read byte is an end marker
+                splashText[x][splashTextCharactersReceived] = 3;
+                break; // End the loop
+            }
+            else if (readByte != 255) { // If the read byte is part of the store name
+                splashText[x][splashTextCharactersReceived] = readByte;
+                splashTextCharactersReceived++; // Increment the number of characters received
+            }
+
+            if (splashTextCharactersReceived == 32) { // If the store name character limit has been reached
+                break; // end the loop
+            }
         }
     }
+
 
     deviceConnected = true;
     lcd.clear();
@@ -156,18 +172,16 @@ void loop() {
                 newByte = false;
                 break;
 
-            case 133:
-                printStoreName();
-                newByte = false;
-                break;
-
             case 134: // Check GSM status
                 Serial.print(checkGSM(100));
                 newByte = false;
                 break;
 
             case 135: //TODO Get GSM Signal Quality
-
+                Serial.write(2);
+                Serial.print(getGSMSignalQuality());
+                Serial.write(3);
+                newByte = false;
                 break;
 
             case 136: // Set store name
@@ -190,17 +204,20 @@ void loop() {
                 newByte = false;
                 break;
 
-            case 140: // SMS Mode
-                Serial.print(SMSSend());
-                newByte = false;
-                break;
-
             case 141: // Create new PIN
                 menuID = 4;
                 newByte = false;
                 break;
 
-            
+            case 143: // Check SIM
+                Serial.print(checkSIM());
+                newByte = false;
+                break;
+
+            case 151: // Check SIM status
+                Serial.print(checkSIM());
+                newByte = false;
+                break;
         }
     }
 
@@ -209,19 +226,18 @@ void loop() {
         // Check if the last menu ID was not the splash screen
         if (lastMenuID != 1) {
             lcd.clear();
-            lcd.setCursor(0,0);
-            // Write the welcome message template
-            for (int x = 0; x < 11; x++) {
-                lcd.write(welcomeMessage[x]);
-            }
 
-            // Write the store name
-            //lcd.setCursor(0,1);
-            for (int x = 0; x < 25; x++) {
-                if (EEPROM.read(x) == 3) {
-                    break;
+            // Iterate twice for each row
+            for (int x = 0; x < 2; x++) {
+                lcd.setCursor(0,x);
+
+                // Write the store name
+                for (int y = 0; y < 32; y++) {
+                    if (splashText[x][y] == 3) {
+                        break;
+                    }
+                    lcd.write(splashText[x][y]);
                 }
-                lcd.write(EEPROM.read(x));
             }
         }
         
@@ -243,13 +259,9 @@ void loop() {
     else if (menuID == 4) {
         PINCreate();
     }
-    // Set store name
-    else if (menuID == 5) {
-        setStoreName();
-    }
-    // AT Debug Mode
+    // AT Command Mode
     else if (menuID == 6) {
-        ATDebugMode();
+        ATCommandMode();
     }
 
     lastMenuID = menuID; // Save the current menu ID to be remembered as the last menu ID
@@ -291,45 +303,6 @@ void RFIDRead() {
     lcd.clear(); // Clear the LCD before finishing
 }
 
-void writeSerialDataToEEPROM(int startAddress) {
-    // Keeps track of what EEPROM address to write to
-    int writeToAddress = startAddress;
-    boolean endMarkerReceived = false;
-
-    // Wait for the end marker to arrive before proceeding
-    while (!endMarkerReceived) {
-        // While there is data coming in from the Serial monitor
-        while(Serial.available()) {
-            byte readByte = Serial.read(); // Read arriving Serial data
-            // If an end marker is received
-            if (readByte == 3) {
-                smartEEPROMWrite(writeToAddress,3); // Write a END TEXT marker
-                endMarkerReceived = true;
-                break;
-            }
-            // If the read byte is part of the data to be stored
-            else {
-                smartEEPROMWrite(writeToAddress,readByte); // Write the arriving byte into storage
-                writeToAddress++; // Increment target EEPROM address to write to
-            }
-        }
-    }
-}
-
-// Checks the current adress if it has the same value as the candidate byte to reduce the need
-// to overwrite an address with the same data
-boolean smartEEPROMWrite(int address, byte input) {
-    // Check if the candidate byte is different from the currently held byte
-    if (EEPROM.read(address) != input) {
-        EEPROM.write(address, input); // Write the candidate byte to the selected address to overwrite the old data
-        return true; // Indicate that data has been overwritten
-    }
-    // If the candidate byte is the same with the currently held byte
-    else {
-        return false; // Indicate that no writing has been done
-    }
-}
-
 // Clears a row on the LCD
 void clearLCDRow(int row) {
     lcd.setCursor(0,row);
@@ -342,11 +315,11 @@ void clearLCDRow(int row) {
 // Plays an error tone for 750ms so I don't have to write these couple lines down every single time
 void buzzerError() {
     if (!muteBuzzer) {
-        tone(buzzerPin, 500);
+        tone(buzzerPin, 150);
         delay(250);
         noTone(buzzerPin);
         delay(250);
-        tone(buzzerPin, 500);
+        tone(buzzerPin, 150);
         delay(250);
         noTone(buzzerPin);
     }
@@ -359,25 +332,4 @@ void buzzerSuccess() {
         delay(500);
         noTone(buzzerPin);
     }
-}
-
-// TODO Make the POS verify with the device what name should it use
-// Prints the store name
-void printStoreName() {
-    Serial.write(2);
-    for (int x = 0; x < 24; x++) {
-        byte readByte = EEPROM.read(x);
-        // If the end marker is found
-        if (readByte == 3) {
-            break;
-        }
-
-        Serial.write(readByte);
-    }
-    Serial.write(3);
-}
-
-// Changes the stored store name
-void setStoreName() {
-    writeSerialDataToEEPROM(0);
 }

@@ -63,6 +63,7 @@ void PINChallenge() {
                 char readKey = keypad.getKey(); // Grab data from keypad
                 // If the keypad was pressed
                 if (readKey) {
+
                     // If the pressed key is a digit
                     if (readKey > 47 && readKey < 58) {
                         // If there are already 6 digits entered

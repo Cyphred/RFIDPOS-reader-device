@@ -21,6 +21,17 @@ void PINChallenge() {
         if (readByte == 131) {
             return;
         }
+        // Get GSM Signal Quality
+        else if (readByte == 135) {
+            Serial.write(2);
+            Serial.print(getGSMSignalQuality());
+            Serial.write(3);
+        }
+        // Device status inquiry
+        else if (readByte == 142) {
+            Serial.print(1);
+            break;
+        }
         // The end marker for the PIN
         else if (readByte == 3) {
             break;
@@ -30,7 +41,6 @@ void PINChallenge() {
             targetPIN[PINCharactersReceived] = readByte; // Add the digit to the target PIN
             PINCharactersReceived++; // Increment the counter for the received digits
         }
-        // TODO also add a call for device status and gsm status here
     }
 
     byte attemptsLeft = 3; // Keeps track of the attempts left
@@ -56,8 +66,16 @@ void PINChallenge() {
                 if (readByte == 131) {
                     return; // Cancels the method
                 }
-                else {
-                    // TODO Add status inquries here
+                // Get GSM Signal Quality
+                else if (readByte == 135) {
+                    Serial.write(2);
+                    Serial.print(getGSMSignalQuality());
+                    Serial.write(3);
+                }
+                // Device status inquiry
+                else if (readByte == 142) {
+                    Serial.print(1);
+                    break;
                 }
 
                 char readKey = keypad.getKey(); // Grab data from keypad
@@ -176,8 +194,16 @@ void PINCreate() {
                 if (readByte == 131) {
                     return; // Cancels the method
                 }
-                else {
-                    // TODO Add status inquries here
+                // Get GSM Signal Quality
+                else if (readByte == 135) {
+                    Serial.write(2);
+                    Serial.print(getGSMSignalQuality());
+                    Serial.write(3);
+                }
+                // Device status inquiry
+                else if (readByte == 142) {
+                    Serial.print(1);
+                    break;
                 }
 
                 char readKey = keypad.getKey(); // Grab data from keypad
@@ -230,8 +256,16 @@ void PINCreate() {
             if (readByte == 131) {
                 return; // Cancels the method
             }
-            else {
-                // TODO Add status inquries here
+            // Get GSM Signal Quality
+            else if (readByte == 135) {
+                Serial.write(2);
+                Serial.print(getGSMSignalQuality());
+                Serial.write(3);
+            }
+            // Device status inquiry
+            else if (readByte == 142) {
+                Serial.print(1);
+                break;
             }
 
             char readKey = keypad.getKey(); // Grab data from keypad

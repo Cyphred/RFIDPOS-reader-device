@@ -178,7 +178,7 @@ void loop() {
                 newByte = false;
                 break;
 
-            case 135: //TODO Get GSM Signal Quality
+            case 135:
                 Serial.write(2);
                 Serial.print(getGSMSignalQuality());
                 Serial.write(3);
@@ -208,6 +208,10 @@ void loop() {
             case 141: // Create new PIN
                 menuID = 4;
                 newByte = false;
+                break;
+
+            case 142: // Device status inquiry
+                Serial.print(1);
                 break;
 
             case 143: // Check SIM
@@ -288,7 +292,17 @@ void RFIDRead() {
         if (readByte == 131) { // Cancels the operation
             break; // Break out of the indefinite loop
         }
-        // TODO also add a call for device status and gsm status here
+        // Get GSM Signal Quality
+        else if (readByte == 135) {
+            Serial.write(2);
+            Serial.print(getGSMSignalQuality());
+            Serial.write(3);
+        }
+        // Device status inquiry
+        else if (readByte == 142) {
+            Serial.print(1);
+            break;
+        }
 
         // If a card has been detected and read
         if (nfc.PICC_IsNewCardPresent() && nfc.PICC_ReadCardSerial()) {

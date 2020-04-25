@@ -237,7 +237,7 @@ boolean sendSMS() {
 
 // Gets GSM Signal Quality
 int getGSMSignalQuality() {
-    sendATCommand("AT+CSQ\r",1);
+    sendATCommand("AT+CSQ",1);
     int returnValue = -1;
     String temp = "";
     boolean responseReceived = false;
@@ -317,7 +317,7 @@ void ATCommandMode() {
             Serial.write(gsmSerial.read());
         }
 
-        delay(10);
+        wait();
     }
 }
 

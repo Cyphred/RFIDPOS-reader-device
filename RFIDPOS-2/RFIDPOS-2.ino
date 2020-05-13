@@ -158,10 +158,12 @@ void setup() {
 }
 
 void loop() {
+    /*
     if ((millis() - lastStatusPing) > 1000) { // Sends a status ping to the device every second
         lastStatusPing = millis();
         // TODO create pinging routine
     }
+    */
 
     // If a byte has arrived via serial
     if (Serial.available()) {
@@ -186,6 +188,7 @@ void loop() {
 
             case 135:
                 Serial.write(2);
+                Serial.write(135); // nextbyte identifier
                 Serial.print(getGSMSignalQuality());
                 Serial.write(3);
                 newByte = false;
@@ -217,7 +220,10 @@ void loop() {
                 break;
 
             case 142: // Device status inquiry
+                Serial.write(2);
+                Serial.write(142); // nextbyte identifier
                 Serial.print(1);
+                Serial.write(3);
                 break;
 
             case 143: // Check SIM

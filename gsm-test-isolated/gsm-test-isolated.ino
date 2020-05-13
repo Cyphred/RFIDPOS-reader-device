@@ -39,6 +39,7 @@ void setup() {
         lcd.print("GSM not ready");
     }
     delay(2000);
+    lcd.clear();
 }
 
 byte namePrint = 0;
@@ -69,7 +70,7 @@ void loop() {
                     setTransactionID();
                     break;
                 case 64:
-                    parseSMSTemplate();
+                    parseSMSTemplate_debug();
                     break;
             }
         }
@@ -341,6 +342,91 @@ void parseSMSTemplate() {
             // If a regular character is received, send it to the GSM
             else {
                 gsmSerial.write(readByte);
+            }
+        }
+        // If the current byte is supposed to be ignored
+        else {
+            ignoreNextByte = false; // Set ignoreNextByte to false so that the next byte will not be ignored
+        }
+    }
+}
+
+// Parse SMS template and pass it to GSM module
+void parseSMSTemplate_debug() {
+    // Prints date and time
+    char dateBuffer[32];
+    // Parse unixtime into readable date
+    sprintf(
+        dateBuffer,"%02d-%02d-%02d %02d:%02d:%02d",
+        year(purchaseUnixtime),
+        month(purchaseUnixtime),
+        day(purchaseUnixtime),
+        hour(purchaseUnixtime),
+        minute(purchaseUnixtime),
+        second(purchaseUnixtime)
+    );
+    Serial.println(dateBuffer); // Print the date and time to the SMS
+
+    byte readByte, nextByte; // Stores the currently read bytes
+    boolean ignoreNextByte = false; // Will keep track if the next read byte is supposed to be ignored
+    int readPosition = 25; // The starting position to read from the EEPROM
+    // Will iterate until the maximum size of the EEPROM available on the Arduino UNO
+    while (readPosition < 512) {
+        readByte = EEPROM.read(readPosition); // Read the byte at the current address
+
+        // Only attempt to read the next byte when the currently selected address is not the last one
+        if (readPosition < 511) {
+            nextByte = EEPROM.read(readPosition + 1);
+        }
+
+        readPosition++; // Increment read position to move onto the next address after this iteration
+
+        // If the current byte is NOT supposed to be ignored
+        if (!ignoreNextByte) {
+            // If the end marker has been reached, break out of the while loop
+            if (readByte == 3) {
+                break;
+            }
+            // If a STX marker is encountered, this marks a field with a corresponding code
+            else if (readByte == 2) {
+                ignoreNextByte = true; // The next byte should be ignored because it is a character that represents the field's code
+                switch (nextByte) {
+                    // Purchase Amount (Total)
+                    case 65:
+                        Serial.print(purchaseAmount_whole);
+                        Serial.print('.');
+                        Serial.print(purchaseAmount_decimal);
+                        break;
+
+                    // Store Name
+                    case 66:
+                        for (int x = 0; x < 24; x++) {
+                            byte readName = EEPROM.read(x);
+                            if (readName == 3) {
+                                break;
+                            }
+                            else {
+                                Serial.write(readName);
+                            }
+                        }
+                        break;
+
+                    // Available Balance
+                    case 67:
+                        Serial.print(availableBalance_whole);
+                        Serial.print('.');
+                        Serial.print(availableBalance_decimal);
+                        break;
+
+                    // Transaction ID
+                    case 68:
+                        Serial.print(transactionID);
+                        break;
+                }
+            }
+            // If a regular character is received, send it to the GSM
+            else {
+                Serial.write(readByte);
             }
         }
         // If the current byte is supposed to be ignored

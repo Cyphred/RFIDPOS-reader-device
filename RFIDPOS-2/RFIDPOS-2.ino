@@ -45,10 +45,11 @@ boolean muteBuzzer = false;
 byte menuID = 1;
 byte lastMenuID = 0;
 
-// Misc declarations
+// Misc variables
 byte arrivingByte; // Stores the arriving byte each iteration of the loop
 boolean newByte; // Keeps track if the last arriving byte has not been interpreted yet
 uint32_t timeoutStart; // Global variable for storing the start of timeouts
+long lastStatusPing; // Keeps track of the last time a status ping has been sent to the system
 
 // Splash screen scrolling
 uint32_t lastStep; // The last millis() time that the text was scrolled
@@ -157,6 +158,11 @@ void setup() {
 }
 
 void loop() {
+    if ((millis() - lastStatusPing) > 1000) { // Sends a status ping to the device every second
+        lastStatusPing = millis();
+        // TODO create pinging routine
+    }
+
     // If a byte has arrived via serial
     if (Serial.available()) {
         arrivingByte = Serial.read();
@@ -218,11 +224,6 @@ void loop() {
                 Serial.print(checkSIM());
                 newByte = false;
                 break;
-
-            case 151: // Check SIM status
-                Serial.print(checkSIM());
-                newByte = false;
-                break;
         }
     }
 
@@ -261,7 +262,10 @@ void loop() {
     }
     // PIN Challenge
     else if (menuID == 3) {
-        PINChallenge();
+        byte result = PINChallenge();
+        if (result != 2) { // If the method was not cancelled
+            Serial.print(result);
+        }
     }
     // Create new PIN
     else if (menuID == 4) {
@@ -269,7 +273,7 @@ void loop() {
     }
     // Send an SMS
     else if (menuID == 5) {
-        sendSMS();
+        Serial.print(sendSMS());
     }
     // AT Command Mode
     else if (menuID == 6) {
@@ -280,6 +284,9 @@ void loop() {
     menuID = 1; // Set the next menu ID to the splash screen
 }
 
+/**
+ * Prompts the user to scan an RFID tag and prints the UID to Serial
+ */
 void RFIDRead() {
     lcd.clear();
     lcd.print("Place your card");
@@ -291,17 +298,6 @@ void RFIDRead() {
         byte readByte = Serial.read(); // Read serial data
         if (readByte == 131) { // Cancels the operation
             break; // Break out of the indefinite loop
-        }
-        // Get GSM Signal Quality
-        else if (readByte == 135) {
-            Serial.write(2);
-            Serial.print(getGSMSignalQuality());
-            Serial.write(3);
-        }
-        // Device status inquiry
-        else if (readByte == 142) {
-            Serial.print(1);
-            break;
         }
 
         // If a card has been detected and read
@@ -325,7 +321,9 @@ void RFIDRead() {
     lcd.clear(); // Clear the LCD before finishing
 }
 
-// Clears a row on the LCD
+/**
+ * Clears a row on the LCD
+ */
 void clearLCDRow(int row) {
     lcd.setCursor(0,row);
     for (int x = 0; x < 16; x++) {
@@ -334,7 +332,9 @@ void clearLCDRow(int row) {
     lcd.setCursor(0,row);
 }
 
-// Plays an error tone for 750ms so I don't have to write these couple lines down every single time
+/**
+ * Plays an error tone for 750ms so I don't have to write these couple lines down every single time
+ */
 void buzzerError() {
     if (!muteBuzzer) {
         tone(buzzerPin, 150);
@@ -347,7 +347,9 @@ void buzzerError() {
     }
 }
 
-// Plays success tone for 500ms so I don't have to write these couple lines down every single time
+/**
+ * Plays success tone for 500ms so I don't have to write these couple lines down every single time
+ */
 void buzzerSuccess() {
     if (!muteBuzzer) {
         tone(buzzerPin, 2000);

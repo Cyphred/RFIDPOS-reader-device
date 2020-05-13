@@ -3,8 +3,11 @@
  * Will contain all PIN entry-related methods and variables
  */
 
-// Challenges the user to match the PIN fetched from the database
-void PINChallenge() {
+/**
+ * Challenges the user to match the PIN fetched from the database
+ * @return corresponds the completion state
+ */
+byte PINChallenge() {
     lcd.clear();
     lcd.setCursor(2,0);
     lcd.print("Fetching PIN");
@@ -19,18 +22,7 @@ void PINChallenge() {
         byte readByte = Serial.read(); // Read serial data
         // Cancels the operation
         if (readByte == 131) {
-            return;
-        }
-        // Get GSM Signal Quality
-        else if (readByte == 135) {
-            Serial.write(2);
-            Serial.print(getGSMSignalQuality());
-            Serial.write(3);
-        }
-        // Device status inquiry
-        else if (readByte == 142) {
-            Serial.print(1);
-            break;
+            return 2;
         }
         // The end marker for the PIN
         else if (readByte == 3) {
@@ -64,18 +56,7 @@ void PINChallenge() {
             while (true) {
                 byte readByte = Serial.read(); // Reads the serial in case a cancel byte or status inquiry is issued
                 if (readByte == 131) {
-                    return; // Cancels the method
-                }
-                // Get GSM Signal Quality
-                else if (readByte == 135) {
-                    Serial.write(2);
-                    Serial.print(getGSMSignalQuality());
-                    Serial.write(3);
-                }
-                // Device status inquiry
-                else if (readByte == 142) {
-                    Serial.print(1);
-                    break;
+                    return 2; // Cancels the method
                 }
 
                 char readKey = keypad.getKey(); // Grab data from keypad
@@ -124,10 +105,8 @@ void PINChallenge() {
                             lcd.print("Success");
                             buzzerSuccess();
                             delay(1500);
-
-                            Serial.print(1); // Tell the POS that verification was a Success
                             lcd.clear(); // Clear the LCD before finishing
-                            return; // Ends the method
+                            return 1; // Ends the method
                         }
                         // If a mismatch is found
                         else {
@@ -145,9 +124,8 @@ void PINChallenge() {
 
                             // If there are no more attempts left
                             if (attemptsLeft == 0) {
-                                Serial.print(0);
                                 lcd.clear(); // Clear the LCD before finishing
-                                return; // Ends the method
+                                return 0; // Ends the method
                             }
 
                             break;
@@ -161,7 +139,9 @@ void PINChallenge() {
     lcd.clear(); // Clear the LCD before finishing
 }
 
-// Creates a new PIN by asking for a combination and verifying it
+/**
+ * Creates a new PIN by asking for a combination and verifying it
+ */
 void PINCreate() {
     char initialPIN[6]; // Will store the first entered PIN
     char confirmPIN[6]; // Will store the second entered PIN for verification
@@ -193,17 +173,6 @@ void PINCreate() {
                 byte readByte = Serial.read(); // Reads the serial in case a cancel byte or status inquiry is issued
                 if (readByte == 131) {
                     return; // Cancels the method
-                }
-                // Get GSM Signal Quality
-                else if (readByte == 135) {
-                    Serial.write(2);
-                    Serial.print(getGSMSignalQuality());
-                    Serial.write(3);
-                }
-                // Device status inquiry
-                else if (readByte == 142) {
-                    Serial.print(1);
-                    break;
                 }
 
                 char readKey = keypad.getKey(); // Grab data from keypad
@@ -255,17 +224,6 @@ void PINCreate() {
             byte readByte = Serial.read(); // Reads the serial in case a cancel byte or status inquiry is issued
             if (readByte == 131) {
                 return; // Cancels the method
-            }
-            // Get GSM Signal Quality
-            else if (readByte == 135) {
-                Serial.write(2);
-                Serial.print(getGSMSignalQuality());
-                Serial.write(3);
-            }
-            // Device status inquiry
-            else if (readByte == 142) {
-                Serial.print(1);
-                break;
             }
 
             char readKey = keypad.getKey(); // Grab data from keypad

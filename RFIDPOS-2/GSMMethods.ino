@@ -4,14 +4,6 @@
  * Will contain all GSM-related methods and variables
  */
 
-byte ATCommandCharacterSendingInterval = 10;
-/**
- * The delay in between each byte sent to the GSM module
- */
-void wait() {
-    delay(ATCommandCharacterSendingInterval);
-}
-
 /**
  * Toggles the power switch of the GSM module
  */
@@ -26,7 +18,7 @@ void toggleGSMPower() {
  * @return is true if the GSM module is responsive
  */
 boolean checkGSM(int timeoutDuration) {
-    sendATCommand("AT",true); // Sends AT command to check GSM status
+    gsmSerial.print("AT\r"); // Sends AT command to check GSM status
     timeoutStart = millis(); // Mark the start of the timeout
     resetBufferEnding(); // Clear the current contents of the buffer ending
     
@@ -50,7 +42,7 @@ boolean checkGSM(int timeoutDuration) {
  * @return is true if the SIM is present
  */
 boolean checkSIM() {
-    sendATCommand("AT+CPIN?",true);
+    gsmSerial.print("AT+CPIN?\r");
     String temp = "";
     timeoutStart = millis();
     boolean responseReceived = false;
@@ -82,6 +74,9 @@ boolean checkSIM() {
     return false;
 }
 
+
+String messageData = "";
+byte MessageDataBytes = 0;
 /**
  * Waits for the recipient number and message data, then sends an SMS
  * @return is the completion status of sending the SMS
@@ -90,6 +85,7 @@ boolean checkSIM() {
 // Returns 1 if sending succeeded
 // Returns 2 if an error occurs
 byte sendSMS() {
+    boolean SMSDebugMode = true; // Debugs to LCD
     // The SMS-sending routine will be broken up into several stages which I will label
     lcd.clear();
     lcd.setCursor(1,0);
@@ -99,7 +95,7 @@ byte sendSMS() {
 
     // Stage 1
     // Set the GSM module to SMS sending mode
-    sendATCommand("AT+CMGF=1",true);
+    gsmSerial.print("AT+CMGF=1\r");
 
     timeoutStart = millis(); // Mark the start of the timeout
     resetBufferEnding(); // Clear the current contents of the buffer ending
@@ -134,8 +130,8 @@ byte sendSMS() {
         readyState = false;
         clearLCDRow(1);
         lcd.print("Query recipient");
-        sendATCommand("AT+CMGS=\"+",false);
-        Serial.write(17); // Queries the POS for the recipient's number
+        Serial.write(19); // Queries the POS for the recipient's number
+        String phoneNumber = "";
 
         byte readByte;
         // Wait for the entire phone number to arrive
@@ -144,15 +140,21 @@ byte sendSMS() {
             
             // If the read byte is a valid digit
             if (readByte > 47 && readByte < 58) {
-                gsmSerial.write(readByte); // Send the digit to the GSM module
-                wait();
+                phoneNumber += (char)readByte;
             }
             // If the read byte is the end marker
             else if (readByte == 3) {
                 break;
             }
         }
-        sendATCommand("\"",true);
+        gsmSerial.print("AT+CMGS=\"+");
+        gsmSerial.print(phoneNumber);
+        gsmSerial.print("\"\r");
+
+        if (SMSDebugMode) {
+            clearLCDRow(1);
+            lcd.print(phoneNumber);
+        }
 
         // Wait for the message line marker to be sent
         timeoutStart = millis(); // Mark the start of the timeout
@@ -192,6 +194,7 @@ byte sendSMS() {
         byte readByte;
         clearLCDRow(1);
         lcd.print("Sending");
+        Serial.write(20); // Queries the POS for the message contents
 
         // Keep iterating until the end marker has been received
         while (true) {
@@ -199,19 +202,26 @@ byte sendSMS() {
             
             // If the end marker is received
             if (readByte == 3) {
+                if (messageData != 0) {
+                    gsmSerial.print(messageData);
+                    messageData = "";
+                    MessageDataBytes = 0;
+                }
                 break; // End the loop
             }
             // If any other character is received
-            else {
-                gsmSerial.write(readByte);
-                wait();
-                flushGSMSerial();
-                break;
+            else if (readByte != 255) {
+                messageData += (char)readByte;
+                MessageDataBytes++;
+                if (MessageDataBytes == 160) {
+                    gsmSerial.print(messageData);
+                    messageData = "";
+                    MessageDataBytes = 0;
+                }
             }
         }
 
         gsmSerial.write(26);
-        wait();
 
         // Wait for the GSM module to reply. This is the part without a timeout.
         resetBufferEnding();
@@ -343,8 +353,6 @@ void ATCommandMode() {
         while (gsmSerial.available()) {
             Serial.write(gsmSerial.read());
         }
-
-        wait();
     }
 }
 
@@ -365,7 +373,6 @@ void flushGSMSerial() {
 void sendATCommand(String command, boolean sendCarriageReturn) {
     for (int x = 0; x < command.length(); x++) {
         gsmSerial.print(command.charAt(x));
-        wait();
     }
 
     if (sendCarriageReturn) {

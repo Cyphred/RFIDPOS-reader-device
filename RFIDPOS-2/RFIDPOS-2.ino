@@ -39,7 +39,7 @@ boolean backlightOn;
 
 // Buzzer declarations
 const int buzzerPin = A3;
-boolean muteBuzzer = false;
+boolean muteBuzzer = true;
 
 // Menu operation variables
 byte menuID = 1;

@@ -37,44 +37,6 @@ boolean checkGSM(int timeoutDuration) {
     return false;
 }
 
-/**
- * Checks if the SIM card is detected
- * @return is true if the SIM is present
- */
-boolean checkSIM() {
-    gsmSerial.print("AT+CPIN?\r");
-    String temp = "";
-    timeoutStart = millis();
-    boolean responseReceived = false;
-    while (!responseReceived && (millis() - timeoutStart) < 5000) {
-        if (gsmSerial.available()) {
-            byte readByte = gsmSerial.read();
-            if (readByte != 13 && readByte != 10) {
-                temp += (char)readByte;
-            }
-        }
-
-        if (temp.length() > 2) {
-            char lastChar[] = {temp.charAt(temp.length() - 2),temp.charAt(temp.length() - 1)};
-            if (lastChar[0] == 'O') {
-                if (lastChar[1] == 'K' || lastChar[1] == 'R') {
-                    responseReceived = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    if (responseReceived) {
-        if (temp.indexOf("READY") >= 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-
 String messageData = "";
 byte MessageDataBytes = 0;
 /**
@@ -85,7 +47,7 @@ byte MessageDataBytes = 0;
 // Returns 1 if sending succeeded
 // Returns 2 if an error occurs
 byte sendSMS() {
-    boolean SMSDebugMode = true; // Debugs to LCD
+    boolean SMSDebugMode = false; // Debugs to LCD
     // The SMS-sending routine will be broken up into several stages which I will label
     lcd.clear();
     lcd.setCursor(1,0);

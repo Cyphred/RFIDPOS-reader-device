@@ -39,7 +39,7 @@ boolean backlightOn;
 
 // Buzzer declarations
 const int buzzerPin = A3;
-boolean muteBuzzer = true;
+boolean muteBuzzer = false;
 
 // Menu operation variables
 byte menuID = 1;
@@ -179,17 +179,17 @@ void loop() {
     // If the arrived byte is interpreted in the switch statement, set its state to already read
     if (newByte) {
         switch (arrivingByte) {
-            case 132: // Scan an RFID tag
+            case 7: // Scan an RFID tag
                 menuID = 2;
                 newByte = false;
                 break;
 
-            case 134: // Check GSM status
+            case 8: // Check GSM status
                 Serial.print(checkGSM(100));
                 newByte = false;
                 break;
 
-            case 135:
+            case 9:
                 Serial.write(2);
                 Serial.write(18); // nextbyte identifier
                 Serial.print(getGSMSignalQuality());
@@ -197,41 +197,36 @@ void loop() {
                 newByte = false;
                 break;
 
-            case 136: // Send SMS
+            case 11: // Send SMS
                 menuID = 5;
                 newByte = false;
                 break;
 
-            case 137: // Toggle GSM power
+            case 12: // Toggle GSM power
                 toggleGSMPower();
                 newByte = false;
                 break;
 
-            case 138: // AT Debug Mode
+            case 14: // AT Debug Mode
                 menuID = 6;
                 newByte = false;
                 break;
 
-            case 139: // Challenge
+            case 15: // Challenge
                 menuID = 3;
                 newByte = false;
                 break;
 
-            case 141: // Create new PIN
+            case 16: // Create new PIN
                 menuID = 4;
                 newByte = false;
                 break;
 
-            case 142: // Device status inquiry
+            case 21: // Device status inquiry
                 Serial.write(2);
                 Serial.write(17); // nextbyte identifier
                 Serial.print(1);
                 Serial.write(3);
-                newByte = false;
-                break;
-
-            case 143: // Check SIM
-                Serial.print(checkSIM());
                 newByte = false;
                 break;
         }
@@ -306,7 +301,7 @@ void RFIDRead() {
     // Indefinite loop while waiting for a card to be scanned
     while (true) {
         byte readByte = Serial.read(); // Read serial data
-        if (readByte == 131) { // Cancels the operation
+        if (readByte == 6) { // Cancels the operation
             break; // Break out of the indefinite loop
         }
 

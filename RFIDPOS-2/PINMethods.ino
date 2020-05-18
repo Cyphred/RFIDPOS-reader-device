@@ -21,7 +21,7 @@ byte PINChallenge() {
     while (true) {
         byte readByte = Serial.read(); // Read serial data
         // Cancels the operation
-        if (readByte == 131) {
+        if (readByte == 6) {
             return 2;
         }
         // The end marker for the PIN
@@ -55,7 +55,7 @@ byte PINChallenge() {
             // Another infinite inner loop that will catch the user's inputs
             while (true) {
                 byte readByte = Serial.read(); // Reads the serial in case a cancel byte or status inquiry is issued
-                if (readByte == 131) {
+                if (readByte == 6) {
                     return 2; // Cancels the method
                 }
 
@@ -171,7 +171,7 @@ void PINCreate() {
             // Another infinite inner loop that will catch the user's first inputs
             while (true) {
                 byte readByte = Serial.read(); // Reads the serial in case a cancel byte or status inquiry is issued
-                if (readByte == 131) {
+                if (readByte == 6) {
                     return; // Cancels the method
                 }
 
@@ -222,7 +222,7 @@ void PINCreate() {
         // Another infinite inner loop that will catch the user's second input
         while (true) {
             byte readByte = Serial.read(); // Reads the serial in case a cancel byte or status inquiry is issued
-            if (readByte == 131) {
+            if (readByte == 6) {
                 return; // Cancels the method
             }
 
